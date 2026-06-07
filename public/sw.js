@@ -3,9 +3,7 @@ const CACHE_NAME = "ikonoijoy-miniphoto-v1";
 const APP_SHELL = [
   "/",
   "/index.html",
-  "/manifest.json",
-  "/icon-192.png",
-  "/icon-512.png"
+  "/manifest.json"
 ];
 
 self.addEventListener("install", (event) => {
