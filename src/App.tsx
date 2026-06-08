@@ -322,6 +322,10 @@ function App() {
   const [showSavedProfileImages, setShowSavedProfileImages] = useState(false);
   const [profileImageMemberSelections, setProfileImageMemberSelections] = useState<Record<number, string>>({});
   const [savedProfileImageMemberSelections, setSavedProfileImageMemberSelections] = useState<Record<number, string>>({});
+  const [isApplyingProfileImages, setIsApplyingProfileImages] = useState(false);
+  const [profileApplyMessage, setProfileApplyMessage] = useState(
+    "一括反映は画像を1枚ずつ準備して保存するため、数秒かかる場合があります。ボタンを押した後は完了メッセージが出るまで待ってね。"
+  );
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberName, setEditingMemberName] = useState("");
@@ -2857,10 +2861,14 @@ function App() {
 
       setImportedProfileImages(dedupedImages);
       setProfileImageMemberSelections(defaultSelections);
+      setProfileApplyMessage(
+        `プロフィール画像を${dedupedImages.length}枚取得しました。保存済み画像へ${addedCount}枚追加しました。一括反映は画像を1枚ずつ準備するため、完了まで数秒待ってね。`
+      );
       alert(
-        `プロフィール画像を${dedupedImages.length}枚取得しました。保存済み画像へ${addedCount}枚追加しました。`
+        `プロフィール画像を${dedupedImages.length}枚取得しました。保存済み画像へ${addedCount}枚追加しました。\n\n一括反映は画像を1枚ずつ準備するため、完了まで数秒かかる場合があります。`
       );
     } catch {
+      setProfileApplyMessage("プロフィール画像の取得に失敗しました。URLまたはNetlify Functionを確認してね。");
       alert("プロフィール画像の取得に失敗しました。URLまたはNetlify Functionを確認してね。");
     } finally {
       setIsImportingProfileImages(false);
@@ -2907,12 +2915,15 @@ function App() {
       return;
     }
 
+    setProfileApplyMessage(`「${member.name}」へのプロフィール画像を準備中...`);
     const applied = await applyProfileImageToMember(memberId, image);
     if (!applied) {
+      setProfileApplyMessage("プロフィール画像の反映に失敗しました。数秒待ってから再度試してね。");
       alert("プロフィール画像の反映に失敗しました。画像URLまたはNetlify Functionを確認してね。");
       return;
     }
 
+    setProfileApplyMessage(`「${member.name}」にプロフィール画像を反映しました。`);
     alert(`「${member.name}」にプロフィール画像を反映しました。`);
   };
 
@@ -2926,12 +2937,15 @@ function App() {
       return;
     }
 
+    setProfileApplyMessage(`「${member.name}」への保存済みプロフィール画像を準備中...`);
     const applied = await applyProfileImageToMember(memberId, image);
     if (!applied) {
+      setProfileApplyMessage("保存済みプロフィール画像の反映に失敗しました。数秒待ってから再度試してね。");
       alert("保存済みプロフィール画像の反映に失敗しました。画像URLまたはNetlify Functionを確認してね。");
       return;
     }
 
+    setProfileApplyMessage(`「${member.name}」に保存済みプロフィール画像を反映しました。`);
     alert(`「${member.name}」に保存済みプロフィール画像を反映しました。`);
   };
 
@@ -2943,24 +2957,45 @@ function App() {
       return;
     }
 
-    const nextImages: Record<string, string> = {};
+    setIsApplyingProfileImages(true);
+    setProfileApplyMessage(
+      `一括反映を開始しました。${Math.min(targetMembers.length, importedProfileImages.length)}枚の画像を1枚ずつ準備しています。完了メッセージが出るまで待ってね。`
+    );
 
-    for (let index = 0; index < targetMembers.length; index += 1) {
-      const image = importedProfileImages[index]?.image;
-      if (!image) continue;
+    try {
+      const nextImages: Record<string, string> = {};
+      const applyCount = Math.min(targetMembers.length, importedProfileImages.length);
 
-      const dataUrl = await convertProfileImageToDataUrl(image);
-      if (!dataUrl) continue;
+      for (let index = 0; index < applyCount; index += 1) {
+        const image = importedProfileImages[index]?.image;
+        if (!image) continue;
 
-      nextImages[targetMembers[index].id] = await compressMemberImageForStorage(dataUrl);
+        setProfileApplyMessage(
+          `一括反映中... ${index + 1}/${applyCount}：${targetMembers[index].name} の画像を準備しています。`
+        );
+
+        const dataUrl = await convertProfileImageToDataUrl(image);
+        if (!dataUrl) continue;
+
+        nextImages[targetMembers[index].id] = await compressMemberImageForStorage(dataUrl);
+      }
+
+      setMemberImages((prev) => ({
+        ...prev,
+        ...nextImages,
+      }));
+
+      const reflectedCount = Object.keys(nextImages).length;
+      const message =
+        reflectedCount === applyCount
+          ? `${reflectedCount}人分のメンバー画像を反映しました。`
+          : `${reflectedCount}/${applyCount}人分のメンバー画像を反映しました。反映されなかった画像がある場合は、数秒待ってからもう一度一括反映を押してね。`;
+
+      setProfileApplyMessage(message);
+      alert(message);
+    } finally {
+      setIsApplyingProfileImages(false);
     }
-
-    setMemberImages((prev) => ({
-      ...prev,
-      ...nextImages,
-    }));
-
-    alert(`${Object.keys(nextImages).length}人分のメンバー画像を反映しました。`);
   };
 
   const importProductFromUrl = async () => {
@@ -4481,12 +4516,28 @@ function App() {
             <button
               type="button"
               onClick={applyProfileImagesToGroup}
-              disabled={importedProfileImages.length === 0}
+              disabled={importedProfileImages.length === 0 || isApplyingProfileImages}
               style={secondaryActionButtonStyle}
             >
-              一括反映
+              {isApplyingProfileImages ? "一括反映中..." : "一括反映"}
             </button>
           </div>
+
+          {profileApplyMessage && (
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: "14px",
+                background: isApplyingProfileImages ? "#fff7ed" : "#f8fafc",
+                border: isApplyingProfileImages ? "1px solid #fed7aa" : "1px solid #e5e7eb",
+                color: isApplyingProfileImages ? "#9a3412" : "#6b7280",
+                fontSize: "13px",
+                lineHeight: 1.6,
+              }}
+            >
+              {profileApplyMessage}
+            </div>
+          )}
 
           {importedProfileImages.length > 0 && (
             <div style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.6 }}>
