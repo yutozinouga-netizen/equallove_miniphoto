@@ -243,7 +243,7 @@ function App() {
   const [editingProductHasSecret, setEditingProductHasSecret] = useState(true);
   const [editingProductTargetGroup, setEditingProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [editingProductTargetMemberIds, setEditingProductTargetMemberIds] = useState<string[]>([]);
-  const [editingProductCardCountOverrides, setEditingProductCardCountOverrides] = useState<Record<string, number>>({});
+  const [editingProductCardCountOverrides] = useState<Record<string, number>>({});
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCount, setEditingCount] = useState(0);
