@@ -1108,13 +1108,14 @@ function App() {
 
         if (resolvedLayout === "fixedFive" && normalCardCount === 5) {
           // Plusmemberの「1メンバー5種」画像は、上段3枚・下段2枚の固定配置。
-          // 白背景検出だとカード下部や次段を巻き込みやすいため、カード位置を比率で切り出す。
+          // 商品によってカード周辺の余白量が違うため、余白を広く残すよりも
+          // カード本体を優先して切り出す。これで次の段のカードが混ざるズレを防ぐ。
           const regions = [
-            { x: width * 0.075, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
-            { x: width * 0.3825, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
-            { x: width * 0.69, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
-            { x: width * 0.235, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
-            { x: width * 0.53, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+            { x: width * 0.105, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
+            { x: width * 0.395, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
+            { x: width * 0.685, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
+            { x: width * 0.255, y: height * 0.585, width: width * 0.21, height: height * 0.37 },
+            { x: width * 0.535, y: height * 0.585, width: width * 0.21, height: height * 0.37 },
           ];
 
           const fixedCrops = await cropImageByRegions(sourceImage, regions);
