@@ -16,12 +16,26 @@ type AppProduct = BaseProduct & {
 };
 
 type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "grid3x2" | "detect";
+type ProductTargetGroup = GroupId | "all_groups";
 
 const groupLabels: Record<GroupFilter, string> = {
   all: "すべて",
   equal_love: "=LOVE",
   not_equal_me: "≠ME",
   nearly_equal_joy: "≒JOY",
+};
+
+const productTargetGroupLabels: Record<ProductTargetGroup, string> = {
+  all_groups: "全グループ",
+  equal_love: "=LOVE",
+  not_equal_me: "≠ME",
+  nearly_equal_joy: "≒JOY",
+};
+
+const productTargetGroupOrder: Record<GroupId, number> = {
+  equal_love: 0,
+  not_equal_me: 1,
+  nearly_equal_joy: 2,
 };
 
 const IMAGE_DB_NAME = "ikonoijoy-miniphoto-images";
@@ -187,20 +201,21 @@ function App() {
   const [newProductReleaseDate, setNewProductReleaseDate] = useState("");
   const [newProductNormalCardCount, setNewProductNormalCardCount] = useState(5);
   const [newProductHasSecret, setNewProductHasSecret] = useState(true);
-  const [newProductTargetGroup, setNewProductTargetGroup] = useState<GroupId>("equal_love");
+  const [newProductTargetGroup, setNewProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
   const [selectedImportImageIndexes, setSelectedImportImageIndexes] = useState<number[]>([]);
   const [newProductImportImageLayout, setNewProductImportImageLayout] =
     useState<ImportImageLayout>("auto");
+  const [importPresetHint, setImportPresetHint] = useState("");
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductName, setEditingProductName] = useState("");
   const [editingProductReleaseDate, setEditingProductReleaseDate] = useState("");
   const [editingProductNormalCardCount, setEditingProductNormalCardCount] = useState(5);
   const [editingProductHasSecret, setEditingProductHasSecret] = useState(true);
-  const [editingProductTargetGroup, setEditingProductTargetGroup] = useState<GroupId>("equal_love");
+  const [editingProductTargetGroup, setEditingProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [editingProductTargetMemberIds, setEditingProductTargetMemberIds] = useState<string[]>([]);
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
@@ -482,10 +497,20 @@ function App() {
     );
   };
 
-  const getTargetMembers = (targetGroup: GroupId, selectedIds: string[]) => {
+  const getTargetMembers = (targetGroup: ProductTargetGroup, selectedIds: string[]) => {
     const groupMembers = members
-      .filter((member) => member.active && member.group === targetGroup)
-      .sort((a, b) => a.kana.localeCompare(b.kana, "ja"));
+      .filter((member) => {
+        if (!member.active) return false;
+        if (targetGroup === "all_groups") return true;
+        return member.group === targetGroup;
+      })
+      .sort((a, b) => {
+        if (targetGroup === "all_groups" && a.group !== b.group) {
+          return productTargetGroupOrder[a.group] - productTargetGroupOrder[b.group];
+        }
+
+        return a.kana.localeCompare(b.kana, "ja");
+      });
 
     if (selectedIds.length === 0) {
       return groupMembers;
@@ -544,6 +569,155 @@ function App() {
 
     return selectedImageCount;
   };
+
+  const getRequiredImportImageCount = (
+    targetMemberCount: number,
+    layout: ImportImageLayout
+  ) => {
+    if (targetMemberCount <= 0) return 0;
+
+    if (layout === "grid3x2") {
+      return Math.ceil(targetMemberCount / 3);
+    }
+
+    return targetMemberCount;
+  };
+
+  const selectImportImagesByRequiredCount = (requiredCount: number) => {
+    const safeCount = Math.max(
+      0,
+      Math.min(requiredCount, pendingProductMemberImages.length)
+    );
+
+    setSelectedImportImageIndexes(
+      Array.from({ length: safeCount }, (_, index) => index)
+    );
+  };
+
+  const selectImportImagesByRequiredCountFrom = (
+    requiredCount: number,
+    sourceImages: string[]
+  ) => {
+    const safeCount = Math.max(0, Math.min(requiredCount, sourceImages.length));
+    setSelectedImportImageIndexes(
+      Array.from({ length: safeCount }, (_, index) => index)
+    );
+  };
+
+  const inferGroupFromImportedProduct = (url: string, productName: string): ProductTargetGroup => {
+    const normalizedUrl = url.toLowerCase();
+
+    if (normalizedUrl.includes("ikonoijoy") || productName.includes("イコノイジョイ")) {
+      return "all_groups";
+    }
+
+    if (normalizedUrl.includes("notequalme") || productName.includes("≠ME")) {
+      return "not_equal_me";
+    }
+
+    if (normalizedUrl.includes("nearlyequaljoy") || productName.includes("≒JOY")) {
+      return "nearly_equal_joy";
+    }
+
+    return "equal_love";
+  };
+
+  const applyAutoImportPreset = (
+    importedImages: string[],
+    importedUrl: string,
+    importedProductName: string
+  ) => {
+    const inferredGroup = inferGroupFromImportedProduct(importedUrl, importedProductName);
+
+    if (inferredGroup === "all_groups") {
+      setNewProductNormalCardCount(2);
+      setNewProductHasSecret(false);
+      setNewProductTargetGroup("all_groups");
+      setNewProductTargetMemberIds([]);
+      setNewProductImportImageLayout("grid3x2");
+
+      const targetMemberCount = getTargetMembers("all_groups", []).length;
+      selectImportImagesByRequiredCountFrom(Math.ceil(targetMemberCount / 3), importedImages);
+      setImportPresetHint(
+        "自動判定：イコノイジョイ混在商品として、全グループ・2種・3名×縦2種に設定しました。必要なら手動で切り替えてね。"
+      );
+      return;
+    }
+
+    setNewProductNormalCardCount(5);
+    setNewProductHasSecret(true);
+    setNewProductTargetGroup(inferredGroup);
+    setNewProductTargetMemberIds([]);
+    setNewProductImportImageLayout("fixedFive");
+
+    const targetMemberCount = getTargetMembers(inferredGroup, []).length;
+    selectImportImagesByRequiredCountFrom(targetMemberCount, importedImages);
+    setImportPresetHint(
+      `自動判定：${productTargetGroupLabels[inferredGroup]}の通常商品として、5種・通常5枚切り出しに設定しました。必要なら手動で切り替えてね。`
+    );
+  };
+
+  const applyNormalImportPreset = () => {
+    setNewProductNormalCardCount(5);
+    setNewProductHasSecret(true);
+    setNewProductImportImageLayout("fixedFive");
+    setImportPresetHint("手動切替：通常商品として、5種・通常5枚切り出しに設定しました。");
+
+    const targetMemberCount = getTargetMembers(
+      newProductTargetGroup,
+      newProductTargetMemberIds
+    ).length;
+
+    selectImportImagesByRequiredCount(targetMemberCount);
+  };
+
+  const applyMixedImportPreset = () => {
+    setNewProductNormalCardCount(2);
+    setNewProductHasSecret(false);
+    setNewProductImportImageLayout("grid3x2");
+    setImportPresetHint("手動切替：混在商品として、全グループ・2種・3名×縦2種に設定しました。");
+    setNewProductTargetGroup("all_groups");
+    setNewProductTargetMemberIds([]);
+
+    const targetMemberCount = getTargetMembers("all_groups", []).length;
+    selectImportImagesByRequiredCount(Math.ceil(targetMemberCount / 3));
+  };
+
+
+  useEffect(() => {
+    if (pendingProductMemberImages.length === 0) return;
+
+    const targetMemberCount = getTargetMembers(
+      newProductTargetGroup,
+      newProductTargetMemberIds
+    ).length;
+    const requiredImageCount = getRequiredImportImageCount(
+      targetMemberCount,
+      newProductImportImageLayout
+    );
+
+    if (requiredImageCount <= 0) return;
+
+    setSelectedImportImageIndexes((prev) => {
+      const current = prev
+        .filter((index) => index >= 0 && index < pendingProductMemberImages.length)
+        .sort((a, b) => a - b);
+
+      if (current.length === requiredImageCount) {
+        return current;
+      }
+
+      return Array.from(
+        { length: Math.min(requiredImageCount, pendingProductMemberImages.length) },
+        (_, index) => index
+      );
+    });
+  }, [
+    pendingProductMemberImages.length,
+    newProductImportImageLayout,
+    newProductTargetGroup,
+    newProductTargetMemberIds,
+  ]);
 
   const getProductTargetMembers = (product: AppProduct) => {
     const fallbackGroup = selectedMember.group;
@@ -2003,11 +2177,10 @@ function App() {
         : [];
 
       setPendingProductMemberImages(importedMemberImages);
-      setSelectedImportImageIndexes(importedMemberImages.map((_: string, index: number) => index));
-      setNewProductImportImageLayout("auto");
+      applyAutoImportPreset(importedMemberImages, url, name);
 
       alert(
-        `商品情報を取得しました。メンバー別画像は${Array.isArray(data.product.memberImages) ? data.product.memberImages.length : 0}枚見つかりました。対象メンバーを確認してから「商品を追加」を押してね。`
+        `商品情報を取得しました。メンバー別画像は${Array.isArray(data.product.memberImages) ? data.product.memberImages.length : 0}枚見つかりました。取込タイプは自動設定済みです。必要なら手動で切り替えてから「商品を追加」を押してね。`
       );
     } catch {
       alert(
@@ -2069,9 +2242,9 @@ function App() {
         return;
       }
 
-      if (generatedMemberImageCount < targetMembers.length) {
+      if (generatedMemberImageCount !== targetMembers.length) {
         alert(
-          `選択画像から作れるメンバー画像は${generatedMemberImageCount}人分、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。画像選択・切り出し方式・対象メンバーのチェックを確認してね。`
+          `選択画像から作れるメンバー画像は${generatedMemberImageCount}人分、対象メンバーは${targetMembers.length}人です。画像選択・切り出し方式・対象メンバーのチェックを確認してね。余った画像は登録されず、足りない分は画像なしで登録します。`
         );
       }
 
@@ -2095,6 +2268,7 @@ function App() {
     setPendingProductMemberImages([]);
     setSelectedImportImageIndexes([]);
     setNewProductImportImageLayout("auto");
+    setImportPresetHint("");
   };
 
   const openProductEditor = (product: AppProduct) => {
@@ -2105,8 +2279,9 @@ function App() {
     setEditingProductHasSecret(product.hasSecret);
 
     const targetMembers = getProductTargetMembers(product);
+    const targetGroups = [...new Set(targetMembers.map((member) => member.group))];
     const firstGroup = targetMembers[0]?.group ?? "equal_love";
-    setEditingProductTargetGroup(firstGroup);
+    setEditingProductTargetGroup(targetGroups.length > 1 ? "all_groups" : firstGroup);
     setEditingProductTargetMemberIds(product.targetMemberIds ?? targetMembers.map((member) => member.id));
   };
 
@@ -2591,8 +2766,57 @@ function App() {
             style={inputStyle}
           />
 
+          {pendingProductMemberImages.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gap: "8px",
+                padding: "12px",
+                borderRadius: "12px",
+                background: "#fff7fb",
+                border: "1px solid #f3d9e8",
+              }}
+            >
+              <div style={{ fontWeight: "bold" }}>取込タイプ</div>
+              <p style={{ color: "#666", fontSize: "13px", margin: 0 }}>
+                URL取込時に商品ページから通常商品/混在商品を自動判定する。保険として、ここで手動切り替えもできる。
+              </p>
+              {importPresetHint && (
+                <div
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "10px",
+                    background: "white",
+                    border: "1px solid #f3d9e8",
+                    color: "#374151",
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {importPresetHint}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={applyNormalImportPreset}
+                  style={secondaryActionButtonStyle}
+                >
+                  通常商品（5枚×メンバー）
+                </button>
+                <button
+                  type="button"
+                  onClick={applyMixedImportPreset}
+                  style={secondaryActionButtonStyle}
+                >
+                  混在商品（2枚×全グループ）
+                </button>
+              </div>
+            </div>
+          )}
+
           <label>
-            通常カード数：
+            通常カード数（コレクションに出す種類数）：
             <input
               type="number"
               min="1"
@@ -2759,8 +2983,11 @@ function App() {
                   marginBottom: "10px",
                 }}
               >
-                選択中：{selectedImportImageIndexes.length}枚 / 作成予定：
-                {getImportImageGeneratedMemberCount()}人分 / 対象メンバー：
+                選択中：{selectedImportImageIndexes.length}枚 / 必要画像：
+                {getRequiredImportImageCount(
+                  getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length,
+                  newProductImportImageLayout
+                )}枚 / 作成予定：{getImportImageGeneratedMemberCount()}人分 / 対象メンバー：
                 {getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length}人 / 切り出し方式：{
                   newProductImportImageLayout === "auto"
                     ? "自動"
@@ -2866,11 +3093,12 @@ function App() {
             <select
               value={newProductTargetGroup}
               onChange={(event) => {
-                setNewProductTargetGroup(event.target.value as GroupId);
+                setNewProductTargetGroup(event.target.value as ProductTargetGroup);
                 setNewProductTargetMemberIds([]);
               }}
               style={{ ...inputStyle, marginBottom: "8px" }}
             >
+              <option value="all_groups">全グループ</option>
               <option value="equal_love">=LOVE</option>
               <option value="not_equal_me">≠ME</option>
               <option value="nearly_equal_joy">≒JOY</option>
@@ -4100,7 +4328,7 @@ function App() {
                 <select
                   value={editingProductTargetGroup}
                   onChange={(event) => {
-                    setEditingProductTargetGroup(event.target.value as GroupId);
+                    setEditingProductTargetGroup(event.target.value as ProductTargetGroup);
                     setEditingProductTargetMemberIds([]);
                   }}
                   style={{ ...inputStyle, marginBottom: "8px" }}
