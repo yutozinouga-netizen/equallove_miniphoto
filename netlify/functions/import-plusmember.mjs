@@ -409,9 +409,11 @@ export async function handler(event) {
 
   try {
     const data =
-      mode === "profile"
-        ? await importProfileImages(targetUrl)
-        : await importPlusmemberProduct(targetUrl);
+  mode === "profile"
+    ? await importProfileImages(targetUrl)
+    : mode === "image"
+    ? { image: await imageToDataUrl(targetUrl, targetUrl) }
+    : await importPlusmemberProduct(targetUrl);
 
     return createResponse(200, data);
   } catch (error) {

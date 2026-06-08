@@ -2867,10 +2867,27 @@ function App() {
     }
   };
 
+  const convertProfileImageToDataUrl = async (image: string) => {
+    if (!image) return "";
+    if (image.startsWith("data:")) return image;
+
+    const response = await fetch(
+      `${getImportEndpoint()}?mode=image&url=${encodeURIComponent(image)}`
+    );
+
+    if (!response.ok) return "";
+
+    const data = await response.json();
+    return typeof data.image === "string" ? data.image : "";
+  };
+
   const applyProfileImageToMember = async (memberId: string, image: string) => {
     if (!image) return false;
 
-    const compressedImage = await compressMemberImageForStorage(image);
+    const dataUrl = await convertProfileImageToDataUrl(image);
+    if (!dataUrl) return false;
+
+    const compressedImage = await compressMemberImageForStorage(dataUrl);
 
     setMemberImages((prev) => ({
       ...prev,
@@ -2890,7 +2907,12 @@ function App() {
       return;
     }
 
-    await applyProfileImageToMember(memberId, image);
+    const applied = await applyProfileImageToMember(memberId, image);
+    if (!applied) {
+      alert("プロフィール画像の反映に失敗しました。画像URLまたはNetlify Functionを確認してね。");
+      return;
+    }
+
     alert(`「${member.name}」にプロフィール画像を反映しました。`);
   };
 
@@ -2904,7 +2926,12 @@ function App() {
       return;
     }
 
-    await applyProfileImageToMember(memberId, image);
+    const applied = await applyProfileImageToMember(memberId, image);
+    if (!applied) {
+      alert("保存済みプロフィール画像の反映に失敗しました。画像URLまたはNetlify Functionを確認してね。");
+      return;
+    }
+
     alert(`「${member.name}」に保存済みプロフィール画像を反映しました。`);
   };
 
@@ -2921,7 +2948,11 @@ function App() {
     for (let index = 0; index < targetMembers.length; index += 1) {
       const image = importedProfileImages[index]?.image;
       if (!image) continue;
-      nextImages[targetMembers[index].id] = await compressMemberImageForStorage(image);
+
+      const dataUrl = await convertProfileImageToDataUrl(image);
+      if (!dataUrl) continue;
+
+      nextImages[targetMembers[index].id] = await compressMemberImageForStorage(dataUrl);
     }
 
     setMemberImages((prev) => ({
