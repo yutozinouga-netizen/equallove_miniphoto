@@ -22,6 +22,7 @@ type AppMember = Member & {
 
 type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "grid3x2" | "detect";
 type ProductTargetGroup = GroupId | "all_groups";
+const NO_TARGET_MEMBER_SELECTION = "__none__";
 
 const groupLabels: Record<GroupFilter, string> = {
   all: "すべて",
@@ -227,6 +228,7 @@ function App() {
   const [newProductHasSecret, setNewProductHasSecret] = useState(true);
   const [newProductTargetGroup, setNewProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
+  const [newProductCardCountOverrides, setNewProductCardCountOverrides] = useState<Record<string, number>>({});
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
   const [selectedImportImageIndexes, setSelectedImportImageIndexes] = useState<number[]>([]);
@@ -241,6 +243,7 @@ function App() {
   const [editingProductHasSecret, setEditingProductHasSecret] = useState(true);
   const [editingProductTargetGroup, setEditingProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [editingProductTargetMemberIds, setEditingProductTargetMemberIds] = useState<string[]>([]);
+  const [editingProductCardCountOverrides, setEditingProductCardCountOverrides] = useState<Record<string, number>>({});
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCount, setEditingCount] = useState(0);
@@ -482,6 +485,8 @@ function App() {
     }
   }, [members, selectedMember, selectedMemberId]);
 
+  const selectedGroupTheme = getGroupTheme(selectedMember?.group ?? "equal_love");
+
   const renderMemberAvatar = (member: Member, size = 78) => {
     const image = memberImages[member.id];
     const theme = getGroupTheme(member.group);
@@ -536,6 +541,10 @@ function App() {
 
         return a.kana.localeCompare(b.kana, "ja");
       });
+
+    if (selectedIds.includes(NO_TARGET_MEMBER_SELECTION)) {
+      return [];
+    }
 
     if (selectedIds.length === 0) {
       return groupMembers;
@@ -597,11 +606,23 @@ function App() {
 
   const getRequiredImportImageCount = (
     targetMemberCount: number,
-    layout: ImportImageLayout
+    layout: ImportImageLayout,
+    targetGroup: ProductTargetGroup = newProductTargetGroup,
+    selectedIds: string[] = newProductTargetMemberIds
   ) => {
     if (targetMemberCount <= 0) return 0;
 
     if (layout === "grid3x2") {
+      if (targetGroup === "all_groups") {
+        return (["equal_love", "not_equal_me", "nearly_equal_joy"] as GroupId[]).reduce(
+          (sum, group) => {
+            const groupCount = getTargetMembers(group, selectedIds).length;
+            return sum + Math.ceil(groupCount / 3);
+          },
+          0
+        );
+      }
+
       return Math.ceil(targetMemberCount / 3);
     }
 
@@ -681,7 +702,8 @@ function App() {
       setNewProductImportImageLayout("grid3x2");
 
       const targetMemberCount = getTargetMembers("all_groups", []).length;
-      selectImportImagesByRequiredCountFrom(Math.ceil(targetMemberCount / 3), importedImages);
+      const requiredImageCount = getRequiredImportImageCount(targetMemberCount, "grid3x2", "all_groups", []);
+      selectImportImagesByRequiredCountFrom(requiredImageCount, importedImages);
       setImportPresetHint(
         "自動判定：イコノイジョイ混在商品として、全グループ・2種・3名×縦2種に設定しました。必要なら手動で切り替えてね。"
       );
@@ -724,7 +746,7 @@ function App() {
     setNewProductTargetMemberIds([]);
 
     const targetMemberCount = getTargetMembers("all_groups", []).length;
-    selectImportImagesByRequiredCount(Math.ceil(targetMemberCount / 3));
+    selectImportImagesByRequiredCount(getRequiredImportImageCount(targetMemberCount, "grid3x2", "all_groups", []));
   };
 
 
@@ -737,7 +759,9 @@ function App() {
     ).length;
     const requiredImageCount = getRequiredImportImageCount(
       targetMemberCount,
-      newProductImportImageLayout
+      newProductImportImageLayout,
+      newProductTargetGroup,
+      newProductTargetMemberIds
     );
 
     if (requiredImageCount <= 0) return;
@@ -1779,26 +1803,54 @@ function App() {
     targetMembers: Member[],
     sourceImages: string[],
     normalCardCount: number,
-    importImageLayout: ImportImageLayout
+    importImageLayout: ImportImageLayout,
+    cardCountOverrides: Record<string, number> = {}
   ) => {
     if (sourceImages.length === 0 || targetMembers.length === 0) return;
-
-    const cards = Array.from({ length: normalCardCount }, (_, index) => ({
-      id: `card${index + 1}`,
-    }));
 
     const nextCardImages: Record<string, string> = {};
     const allCrops: string[] = [];
     const memberImageSets: string[][] = [];
 
     if (importImageLayout === "grid3x2") {
-      for (const sourceImage of sourceImages) {
-        const groups = await splitImportedGroupImage(
-          sourceImage,
-          normalCardCount,
-          importImageLayout
-        );
-        memberImageSets.push(...groups);
+      const targetGroups = [...new Set(targetMembers.map((member) => member.group))] as GroupId[];
+
+      if (targetGroups.length > 1) {
+        let sourceImageIndex = 0;
+
+        for (const group of (["equal_love", "not_equal_me", "nearly_equal_joy"] as GroupId[])) {
+          const groupMemberCount = targetMembers.filter((member) => member.group === group).length;
+          if (groupMemberCount === 0) continue;
+
+          const groupSourceImageCount = Math.ceil(groupMemberCount / 3);
+          const groupSourceImages = sourceImages.slice(
+            sourceImageIndex,
+            sourceImageIndex + groupSourceImageCount
+          );
+          sourceImageIndex += groupSourceImageCount;
+
+          const groupSets: string[][] = [];
+
+          for (const sourceImage of groupSourceImages) {
+            const groups = await splitImportedGroupImage(
+              sourceImage,
+              normalCardCount,
+              importImageLayout
+            );
+            groupSets.push(...groups);
+          }
+
+          memberImageSets.push(...groupSets.slice(0, groupMemberCount));
+        }
+      } else {
+        for (const sourceImage of sourceImages) {
+          const groups = await splitImportedGroupImage(
+            sourceImage,
+            normalCardCount,
+            importImageLayout
+          );
+          memberImageSets.push(...groups);
+        }
       }
     } else {
       for (const sourceImage of sourceImages) {
@@ -1813,7 +1865,11 @@ function App() {
 
     for (let memberIndex = 0; memberIndex < targetMembers.length; memberIndex += 1) {
       const member = targetMembers[memberIndex];
-      const imagesToApply = memberImageSets[memberIndex] ?? [];
+      const memberCardCount = Math.max(1, cardCountOverrides[member.id] ?? normalCardCount);
+      const cards = Array.from({ length: memberCardCount }, (_, index) => ({
+        id: `card${index + 1}`,
+      }));
+      const imagesToApply = (memberImageSets[memberIndex] ?? []).slice(0, memberCardCount);
       allCrops.push(...imagesToApply);
 
       for (let cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
@@ -2421,12 +2477,24 @@ function App() {
             (member) => !isMemberAfterGraduation(member, newProductReleaseDate)
           );
 
+    if (targetMembers.length === 0) {
+      alert("対象メンバーが選択されていません。全選択、またはメンバーを選んでね。");
+      return;
+    }
+
     const targetMemberIds = targetMembers.map((member) => member.id);
     const memberImagesToApply = getSelectedImportImages();
     const generatedMemberImageCount =
       newProductImportImageLayout === "grid3x2"
         ? memberImagesToApply.length * 3
         : memberImagesToApply.length;
+
+    const nextCardCountOverrides = Object.fromEntries(
+      targetMembers.map((member) => [
+        member.id,
+        Math.max(1, newProductCardCountOverrides[member.id] ?? newProductNormalCardCount),
+      ])
+    );
 
     const nextProduct: AppProduct = {
       id,
@@ -2436,9 +2504,7 @@ function App() {
       hasSecret: newProductHasSecret,
       targetMemberIds,
       importedMemberImageCount: generatedMemberImageCount,
-      cardCountOverrides: Object.fromEntries(
-        targetMembers.map((member) => [member.id, Math.max(1, newProductNormalCardCount)])
-      ),
+      cardCountOverrides: nextCardCountOverrides,
     };
 
     setProducts((prev) => [...prev, nextProduct]);
@@ -2467,7 +2533,8 @@ function App() {
         targetMembers,
         memberImagesToApply,
         Math.max(1, newProductNormalCardCount),
-        newProductImportImageLayout
+        newProductImportImageLayout,
+        nextCardCountOverrides
       );
     }
 
@@ -2478,6 +2545,7 @@ function App() {
     setNewProductHasSecret(true);
     setNewProductTargetGroup("equal_love");
     setNewProductTargetMemberIds([]);
+    setNewProductCardCountOverrides({});
     setPendingProductLineupImage("");
     setPendingProductMemberImages([]);
     setSelectedImportImageIndexes([]);
@@ -2518,6 +2586,7 @@ function App() {
               releaseDate: editingProductReleaseDate || "未設定",
               normalCardCount: Math.max(1, editingProductNormalCardCount),
               hasSecret: editingProductHasSecret,
+              cardCountOverrides: editingProductCardCountOverrides,
               targetMemberIds:
                 editingProductTargetMemberIds.length > 0
                   ? editingProductTargetMemberIds
@@ -2698,7 +2767,7 @@ function App() {
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #fff7fb 0%, #ffffff 45%, #fafafa 100%)",
+        background: `linear-gradient(180deg, ${selectedGroupTheme.pale} 0%, #ffffff 45%, #fafafa 100%)`,
         fontFamily:
           "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         color: "#111827",
@@ -2726,7 +2795,7 @@ function App() {
         >
           <div
             style={{
-              color: "#ff4fa3",
+              color: selectedGroupTheme.main,
               fontWeight: 900,
               fontSize: "30px",
               letterSpacing: "0.08em",
@@ -2737,7 +2806,7 @@ function App() {
           </div>
           <div
             style={{
-              color: "#ff4fa3",
+              color: selectedGroupTheme.main,
               fontWeight: "bold",
               fontSize: "13px",
               marginBottom: "30px",
@@ -2839,8 +2908,8 @@ function App() {
               onClick={() => setActiveTab("members")}
               style={{
                 ...secondaryActionButtonStyle,
-                borderColor: "#ff4fa3",
-                color: "#ff4fa3",
+                borderColor: selectedGroupTheme.main,
+                color: selectedGroupTheme.main,
                 borderRadius: "999px",
                 padding: "10px 16px",
               }}
@@ -3162,19 +3231,20 @@ function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setNewProductTargetMemberIds([])}
+                onClick={() => setNewProductTargetMemberIds([NO_TARGET_MEMBER_SELECTION])}
                 style={secondaryActionButtonStyle}
               >
-                選択解除
+                全解除
               </button>
             </div>
 
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               {getTargetMembers(newProductTargetGroup, []).map((member) => {
-                const checked =
-                  newProductTargetMemberIds.length === 0
-                    ? !isMemberAfterGraduation(member, newProductReleaseDate)
-                    : newProductTargetMemberIds.includes(member.id);
+                const checked = newProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
+                  ? false
+                  : newProductTargetMemberIds.length === 0
+                  ? !isMemberAfterGraduation(member, newProductReleaseDate)
+                  : newProductTargetMemberIds.includes(member.id);
 
                 return (
                   <label
@@ -3193,10 +3263,10 @@ function App() {
                       onChange={() =>
                         toggleTargetMember(
                           member.id,
-                          newProductTargetMemberIds.length === 0
-                            ? getTargetMembers(newProductTargetGroup, []).map(
-                                (item) => item.id
-                              )
+                          newProductTargetMemberIds.length === 0 || newProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
+                            ? getTargetMembers(newProductTargetGroup, [])
+                                .filter((item) => !isMemberAfterGraduation(item, newProductReleaseDate))
+                                .map((item) => item.id)
                             : newProductTargetMemberIds,
                           setNewProductTargetMemberIds
                         )
@@ -3207,6 +3277,48 @@ function App() {
                   </label>
                 );
               })}
+            </div>
+
+            <div style={{ display: "grid", gap: "8px", marginTop: "12px" }}>
+              <div style={{ fontWeight: "bold", color: "#374151" }}>メンバー別の種類数</div>
+              <p style={{ color: "#666", fontSize: "13px", margin: 0 }}>
+                基本は通常カード数と同じ。特定メンバーだけ種類数が違う商品はここで調整する。
+              </p>
+              {getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).map((member) => (
+                <label
+                  key={`${member.id}-card-count`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                    padding: "8px 10px",
+                    borderRadius: "12px",
+                    background: "white",
+                    border: "1px solid #eee",
+                  }}
+                >
+                  <span style={{ fontWeight: "bold" }}>{member.name}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newProductCardCountOverrides[member.id] ?? newProductNormalCardCount}
+                    onChange={(event) =>
+                      setNewProductCardCountOverrides((prev) => ({
+                        ...prev,
+                        [member.id]: Math.max(1, Number(event.target.value) || 1),
+                      }))
+                    }
+                    style={{
+                      width: "72px",
+                      padding: "8px",
+                      borderRadius: "10px",
+                      border: "1px solid #ddd",
+                      fontSize: "16px",
+                    }}
+                  />
+                </label>
+              ))}
             </div>
 
             <p style={{ color: "#666", fontSize: "13px", marginBottom: 0 }}>
@@ -3274,7 +3386,7 @@ function App() {
                   onClick={clearImportImageSelection}
                   style={secondaryActionButtonStyle}
                 >
-                  選択解除
+                  全解除
                 </button>
               </div>
 
@@ -3588,13 +3700,16 @@ function App() {
             style={inputStyle}
           />
 
-          <input
-            type="date"
-            value={newMemberGraduationDate}
-            onChange={(event) => setNewMemberGraduationDate(event.target.value)}
-            placeholder="卒業年月日"
-            style={inputStyle}
-          />
+          <label style={{ display: "grid", gap: "6px", fontWeight: "bold", color: "#374151" }}>
+            卒業日
+            <input
+              type="date"
+              value={newMemberGraduationDate}
+              onChange={(event) => setNewMemberGraduationDate(event.target.value)}
+              aria-label="卒業日"
+              style={inputStyle}
+            />
+          </label>
 
           <select
             value={newMemberGroup}
@@ -4386,13 +4501,16 @@ function App() {
                 style={inputStyle}
               />
 
-              <input
-                type="date"
-                value={editingMemberGraduationDate}
-                onChange={(event) => setEditingMemberGraduationDate(event.target.value)}
-                placeholder="卒業年月日"
-                style={inputStyle}
-              />
+              <label style={{ display: "grid", gap: "6px", fontWeight: "bold", color: "#374151" }}>
+                卒業日
+                <input
+                  type="date"
+                  value={editingMemberGraduationDate}
+                  onChange={(event) => setEditingMemberGraduationDate(event.target.value)}
+                  aria-label="卒業日"
+                  style={inputStyle}
+                />
+              </label>
 
               <select
                 value={editingMemberGroup}
@@ -4602,18 +4720,19 @@ function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setEditingProductTargetMemberIds([])}
+                    onClick={() => setEditingProductTargetMemberIds([NO_TARGET_MEMBER_SELECTION])}
                     style={secondaryActionButtonStyle}
                   >
-                    選択解除
+                    全解除
                   </button>
                 </div>
 
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   {getTargetMembers(editingProductTargetGroup, []).map((member) => {
-                    const checked =
-                      editingProductTargetMemberIds.length === 0 ||
-                      editingProductTargetMemberIds.includes(member.id);
+                    const checked = editingProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
+                      ? false
+                      : editingProductTargetMemberIds.length === 0 ||
+                        editingProductTargetMemberIds.includes(member.id);
 
                     return (
                       <label
