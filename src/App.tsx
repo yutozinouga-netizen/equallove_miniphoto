@@ -192,8 +192,6 @@ function App() {
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
   const [selectedImportImageIndexes, setSelectedImportImageIndexes] = useState<number[]>([]);
-  const [newProductImportImageStart, setNewProductImportImageStart] = useState(1);
-  const [newProductImportImageLimit, setNewProductImportImageLimit] = useState(0);
   const [newProductImportImageLayout, setNewProductImportImageLayout] =
     useState<ImportImageLayout>("auto");
 
@@ -2006,8 +2004,6 @@ function App() {
 
       setPendingProductMemberImages(importedMemberImages);
       setSelectedImportImageIndexes(importedMemberImages.map((_: string, index: number) => index));
-      setNewProductImportImageStart(1);
-      setNewProductImportImageLimit(0);
       setNewProductImportImageLayout("auto");
 
       alert(
@@ -2098,8 +2094,6 @@ function App() {
     setPendingProductLineupImage("");
     setPendingProductMemberImages([]);
     setSelectedImportImageIndexes([]);
-    setNewProductImportImageStart(1);
-    setNewProductImportImageLimit(0);
     setNewProductImportImageLayout("auto");
   };
 
