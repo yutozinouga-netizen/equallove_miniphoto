@@ -189,6 +189,8 @@ function App() {
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
+  const [newProductImportImageStart, setNewProductImportImageStart] = useState(1);
+  const [newProductImportImageLimit, setNewProductImportImageLimit] = useState(0);
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductName, setEditingProductName] = useState("");
@@ -1629,6 +1631,15 @@ function App() {
         : getTargetMembers(newProductTargetGroup, []);
 
     const targetMemberIds = targetMembers.map((member) => member.id);
+    const importStartIndex = Math.max(0, newProductImportImageStart - 1);
+    const importImageLimit =
+      newProductImportImageLimit > 0
+        ? newProductImportImageLimit
+        : targetMembers.length;
+    const memberImagesToApply = pendingProductMemberImages.slice(
+      importStartIndex,
+      importStartIndex + importImageLimit
+    );
 
     const nextProduct: AppProduct = {
       id,
@@ -1637,7 +1648,7 @@ function App() {
       normalCardCount: Math.max(1, newProductNormalCardCount),
       hasSecret: newProductHasSecret,
       targetMemberIds,
-      importedMemberImageCount: pendingProductMemberImages.length,
+      importedMemberImageCount: memberImagesToApply.length,
     };
 
     setProducts((prev) => [...prev, nextProduct]);
@@ -1650,16 +1661,16 @@ function App() {
     }
 
     if (pendingProductMemberImages.length > 0) {
-      if (pendingProductMemberImages.length < targetMembers.length) {
+      if (memberImagesToApply.length < targetMembers.length) {
         alert(
-          `メンバー別画像は${pendingProductMemberImages.length}枚、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。対象メンバーのチェックを確認してね。`
+          `使用するメンバー別画像は${memberImagesToApply.length}枚、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。開始番号・使用枚数・対象メンバーのチェックを確認してね。`
         );
       }
 
       await applyImportedMemberImages(
         id,
         targetMembers,
-        pendingProductMemberImages,
+        memberImagesToApply,
         Math.max(1, newProductNormalCardCount)
       );
     }
@@ -1673,6 +1684,8 @@ function App() {
     setNewProductTargetMemberIds([]);
     setPendingProductLineupImage("");
     setPendingProductMemberImages([]);
+    setNewProductImportImageStart(1);
+    setNewProductImportImageLimit(0);
   };
 
   const openProductEditor = (product: AppProduct) => {
@@ -2275,8 +2288,73 @@ function App() {
                 メンバー別画像：{pendingProductMemberImages.length}枚
               </div>
               <p style={{ color: "#666", fontSize: "13px", marginBottom: "10px" }}>
-                商品追加時に、対象メンバーのあいうえお順へ上から順番に割り当てる。11人時代は齊藤なぎさをメンバー追加してチェックに含めてね。
+                通常商品は1番から対象メンバー順に自動割り当て。イコノイジョイ混在商品は、グループごとの開始番号と使用枚数を指定して分割登録できる。
               </p>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isCompactLayout ? "1fr" : "1fr 1fr",
+                  gap: "10px",
+                  marginBottom: "10px",
+                }}
+              >
+                <label style={{ fontWeight: "bold", color: "#374151" }}>
+                  画像の開始番号
+                  <input
+                    type="number"
+                    min="1"
+                    max={pendingProductMemberImages.length}
+                    value={newProductImportImageStart}
+                    onChange={(event) =>
+                      setNewProductImportImageStart(
+                        Math.max(1, Number(event.target.value) || 1)
+                      )
+                    }
+                    style={{ ...inputStyle, marginTop: "6px" }}
+                  />
+                </label>
+
+                <label style={{ fontWeight: "bold", color: "#374151" }}>
+                  使用画像数（0で対象メンバー数）
+                  <input
+                    type="number"
+                    min="0"
+                    max={pendingProductMemberImages.length}
+                    value={newProductImportImageLimit}
+                    onChange={(event) =>
+                      setNewProductImportImageLimit(
+                        Math.max(0, Number(event.target.value) || 0)
+                      )
+                    }
+                    style={{ ...inputStyle, marginTop: "6px" }}
+                  />
+                </label>
+              </div>
+
+              <div
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: "10px",
+                  background: "white",
+                  border: "1px solid #f3d9e8",
+                  color: "#6b7280",
+                  fontSize: "13px",
+                  marginBottom: "10px",
+                }}
+              >
+                今回使用する画像：{newProductImportImageStart}番〜
+                {Math.min(
+                  pendingProductMemberImages.length,
+                  newProductImportImageStart +
+                    (newProductImportImageLimit > 0
+                      ? newProductImportImageLimit
+                      : getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length) -
+                    1
+                )}
+                番
+              </div>
+
               <div
                 style={{
                   display: "grid",
@@ -2288,7 +2366,18 @@ function App() {
                   <div
                     key={`${image}-${index}`}
                     style={{
-                      border: "1px solid #f3d9e8",
+                      border:
+                        index >= newProductImportImageStart - 1 &&
+                        index <
+                          newProductImportImageStart - 1 +
+                            (newProductImportImageLimit > 0
+                              ? newProductImportImageLimit
+                              : getTargetMembers(
+                                  newProductTargetGroup,
+                                  newProductTargetMemberIds
+                                ).length)
+                          ? "2px solid #ff4fa3"
+                          : "1px solid #f3d9e8",
                       borderRadius: "10px",
                       overflow: "hidden",
                       background: "white",
