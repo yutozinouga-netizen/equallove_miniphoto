@@ -2964,7 +2964,7 @@ function App() {
                 </div>
 
                 {lineupImage && (
-                  <details open style={{ marginTop: "12px" }}>
+                  <details style={{ marginTop: "12px" }}>
                     <summary
                       style={{
                         cursor: "pointer",
