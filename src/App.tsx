@@ -419,15 +419,16 @@ function App() {
       >
         {image ? (
           <img
-            src={image}
-            alt={member.name}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
+           src={image}
+           alt={card.label}
+          style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          display: "block",
+          background: "white",
+  }}
+/>
         ) : (
           member.name.slice(0, 1)
         )}
