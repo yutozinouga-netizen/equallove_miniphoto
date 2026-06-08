@@ -191,6 +191,7 @@ function App() {
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
+  const [selectedImportImageIndexes, setSelectedImportImageIndexes] = useState<number[]>([]);
   const [newProductImportImageStart, setNewProductImportImageStart] = useState(1);
   const [newProductImportImageLimit, setNewProductImportImageLimit] = useState(0);
   const [newProductImportImageLayout, setNewProductImportImageLayout] =
@@ -506,6 +507,44 @@ function App() {
     }
 
     setSelectedIds([...selectedIds, memberId]);
+  };
+
+  const toggleImportImageSelection = (imageIndex: number) => {
+    setSelectedImportImageIndexes((prev) => {
+      if (prev.includes(imageIndex)) {
+        return prev.filter((index) => index !== imageIndex);
+      }
+
+      return [...prev, imageIndex].sort((a, b) => a - b);
+    });
+  };
+
+  const selectAllImportImages = () => {
+    setSelectedImportImageIndexes(
+      pendingProductMemberImages.map((_, index) => index)
+    );
+  };
+
+  const clearImportImageSelection = () => {
+    setSelectedImportImageIndexes([]);
+  };
+
+  const getSelectedImportImages = () => {
+    return selectedImportImageIndexes
+      .filter((index) => index >= 0 && index < pendingProductMemberImages.length)
+      .sort((a, b) => a - b)
+      .map((index) => pendingProductMemberImages[index])
+      .filter(Boolean);
+  };
+
+  const getImportImageGeneratedMemberCount = () => {
+    const selectedImageCount = selectedImportImageIndexes.length;
+
+    if (newProductImportImageLayout === "grid3x2") {
+      return selectedImageCount * 3;
+    }
+
+    return selectedImageCount;
   };
 
   const getProductTargetMembers = (product: AppProduct) => {
@@ -1961,11 +2000,12 @@ function App() {
       setNewProductNormalCardCount(Number(data.product.normalCardCount ?? 5));
       setNewProductHasSecret(Boolean(data.product.hasSecret ?? true));
       setPendingProductLineupImage(String(data.product.lineupImage ?? ""));
-      setPendingProductMemberImages(
-        Array.isArray(data.product.memberImages)
-          ? data.product.memberImages.map((image: unknown) => String(image)).filter(Boolean)
-          : []
-      );
+      const importedMemberImages = Array.isArray(data.product.memberImages)
+        ? data.product.memberImages.map((image: unknown) => String(image)).filter(Boolean)
+        : [];
+
+      setPendingProductMemberImages(importedMemberImages);
+      setSelectedImportImageIndexes(importedMemberImages.map((_: string, index: number) => index));
       setNewProductImportImageStart(1);
       setNewProductImportImageLimit(0);
       setNewProductImportImageLayout("auto");
@@ -2002,15 +2042,11 @@ function App() {
         : getTargetMembers(newProductTargetGroup, []);
 
     const targetMemberIds = targetMembers.map((member) => member.id);
-    const importStartIndex = Math.max(0, newProductImportImageStart - 1);
-    const importImageLimit =
-      newProductImportImageLimit > 0
-        ? newProductImportImageLimit
-        : targetMembers.length;
-    const memberImagesToApply = pendingProductMemberImages.slice(
-      importStartIndex,
-      importStartIndex + importImageLimit
-    );
+    const memberImagesToApply = getSelectedImportImages();
+    const generatedMemberImageCount =
+      newProductImportImageLayout === "grid3x2"
+        ? memberImagesToApply.length * 3
+        : memberImagesToApply.length;
 
     const nextProduct: AppProduct = {
       id,
@@ -2019,7 +2055,7 @@ function App() {
       normalCardCount: Math.max(1, newProductNormalCardCount),
       hasSecret: newProductHasSecret,
       targetMemberIds,
-      importedMemberImageCount: memberImagesToApply.length,
+      importedMemberImageCount: generatedMemberImageCount,
     };
 
     setProducts((prev) => [...prev, nextProduct]);
@@ -2032,9 +2068,14 @@ function App() {
     }
 
     if (pendingProductMemberImages.length > 0) {
-      if (memberImagesToApply.length < targetMembers.length) {
+      if (memberImagesToApply.length === 0) {
+        alert("使用する画像が選択されていません。画像をタップして選択してね。");
+        return;
+      }
+
+      if (generatedMemberImageCount < targetMembers.length) {
         alert(
-          `使用するメンバー別画像は${memberImagesToApply.length}枚、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。開始番号・使用枚数・対象メンバーのチェックを確認してね。`
+          `選択画像から作れるメンバー画像は${generatedMemberImageCount}人分、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。画像選択・切り出し方式・対象メンバーのチェックを確認してね。`
         );
       }
 
@@ -2056,6 +2097,7 @@ function App() {
     setNewProductTargetMemberIds([]);
     setPendingProductLineupImage("");
     setPendingProductMemberImages([]);
+    setSelectedImportImageIndexes([]);
     setNewProductImportImageStart(1);
     setNewProductImportImageLimit(0);
     setNewProductImportImageLayout("auto");
@@ -2661,49 +2703,8 @@ function App() {
                 メンバー別画像：{pendingProductMemberImages.length}枚
               </div>
               <p style={{ color: "#666", fontSize: "13px", marginBottom: "10px" }}>
-                通常商品は1番から対象メンバー順に自動割り当て。混在商品は、グループごとの開始番号と使用する元画像数を指定して分割登録できる。1枚の元画像に3名×縦2種が入っている商品は「3名×縦2種」を選んでね。
+                画像をタップして使用する画像を選択する。混在商品は、グループごとに必要な画像だけ選択して分割登録できる。1枚の元画像に3名×縦2種が入っている商品は「3名×縦2種」を選んでね。
               </p>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isCompactLayout ? "1fr" : "1fr 1fr",
-                  gap: "10px",
-                  marginBottom: "10px",
-                }}
-              >
-                <label style={{ fontWeight: "bold", color: "#374151" }}>
-                  画像の開始番号
-                  <input
-                    type="number"
-                    min="1"
-                    max={pendingProductMemberImages.length}
-                    value={newProductImportImageStart}
-                    onChange={(event) =>
-                      setNewProductImportImageStart(
-                        Math.max(1, Number(event.target.value) || 1)
-                      )
-                    }
-                    style={{ ...inputStyle, marginTop: "6px" }}
-                  />
-                </label>
-
-                <label style={{ fontWeight: "bold", color: "#374151" }}>
-                  使用する元画像数（0で対象メンバー数）
-                  <input
-                    type="number"
-                    min="0"
-                    max={pendingProductMemberImages.length}
-                    value={newProductImportImageLimit}
-                    onChange={(event) =>
-                      setNewProductImportImageLimit(
-                        Math.max(0, Number(event.target.value) || 0)
-                      )
-                    }
-                    style={{ ...inputStyle, marginTop: "6px" }}
-                  />
-                </label>
-              </div>
 
               <label
                 style={{
@@ -2731,6 +2732,30 @@ function App() {
 
               <div
                 style={{
+                  display: "flex",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                  marginBottom: "10px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={selectAllImportImages}
+                  style={secondaryActionButtonStyle}
+                >
+                  すべて選択
+                </button>
+                <button
+                  type="button"
+                  onClick={clearImportImageSelection}
+                  style={secondaryActionButtonStyle}
+                >
+                  選択解除
+                </button>
+              </div>
+
+              <div
+                style={{
                   padding: "8px 10px",
                   borderRadius: "10px",
                   background: "white",
@@ -2740,22 +2765,17 @@ function App() {
                   marginBottom: "10px",
                 }}
               >
-                今回使用する画像：{newProductImportImageStart}番〜
-                {Math.min(
-                  pendingProductMemberImages.length,
-                  newProductImportImageStart +
-                    (newProductImportImageLimit > 0
-                      ? newProductImportImageLimit
-                      : getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length) -
-                    1
-                )}
-                番 / 切り出し方式：{
+                選択中：{selectedImportImageIndexes.length}枚 / 作成予定：
+                {getImportImageGeneratedMemberCount()}人分 / 対象メンバー：
+                {getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length}人 / 切り出し方式：{
                   newProductImportImageLayout === "auto"
                     ? "自動"
                     : newProductImportImageLayout === "fixedFive"
                     ? "通常5枚"
                     : newProductImportImageLayout === "vertical"
                     ? "縦並び"
+                    : newProductImportImageLayout === "grid3x2"
+                    ? "3名×縦2種"
                     : "従来検出"
                 }
               </div>
@@ -2767,50 +2787,72 @@ function App() {
                   gap: "8px",
                 }}
               >
-                {pendingProductMemberImages.slice(0, 40).map((image, index) => (
-                  <div
-                    key={`${image}-${index}`}
-                    style={{
-                      border:
-                        index >= newProductImportImageStart - 1 &&
-                        index <
-                          newProductImportImageStart - 1 +
-                            (newProductImportImageLimit > 0
-                              ? newProductImportImageLimit
-                              : getTargetMembers(
-                                  newProductTargetGroup,
-                                  newProductTargetMemberIds
-                                ).length)
-                          ? "2px solid #ff4fa3"
-                          : "1px solid #f3d9e8",
-                      borderRadius: "10px",
-                      overflow: "hidden",
-                      background: "white",
-                    }}
-                  >
-                    <img
-                      src={image}
-                      alt={`メンバー別画像 ${index + 1}`}
+                {pendingProductMemberImages.slice(0, 60).map((image, index) => {
+                  const isSelected = selectedImportImageIndexes.includes(index);
+
+                  return (
+                    <button
+                      type="button"
+                      key={`${image}-${index}`}
+                      onClick={() => toggleImportImageSelection(index)}
                       style={{
-                        width: "100%",
-                        aspectRatio: "1 / 1",
-                        objectFit: "contain",
-                        display: "block",
-                      }}
-                    />
-                    <div
-                      style={{
-                        padding: "4px",
-                        textAlign: "center",
-                        fontSize: "12px",
-                        color: "#6b7280",
-                        fontWeight: "bold",
+                        border: isSelected ? "3px solid #ff4fa3" : "1px solid #f3d9e8",
+                        borderRadius: "10px",
+                        overflow: "hidden",
+                        background: isSelected ? "#fff0f7" : "white",
+                        padding: 0,
+                        cursor: "pointer",
+                        position: "relative",
+                        boxShadow: isSelected
+                          ? "0 0 0 3px rgba(255, 79, 163, 0.16)"
+                          : "none",
                       }}
                     >
-                      {index + 1}
-                    </div>
-                  </div>
-                ))}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "6px",
+                          left: "6px",
+                          zIndex: 1,
+                          minWidth: "26px",
+                          height: "26px",
+                          borderRadius: "999px",
+                          background: isSelected ? "#ff4fa3" : "rgba(255,255,255,0.9)",
+                          color: isSelected ? "white" : "#6b7280",
+                          display: "grid",
+                          placeItems: "center",
+                          fontSize: "12px",
+                          fontWeight: 900,
+                          border: "1px solid #f3d9e8",
+                        }}
+                      >
+                        {index + 1}
+                      </div>
+                      <img
+                        src={image}
+                        alt={`メンバー別画像 ${index + 1}`}
+                        style={{
+                          width: "100%",
+                          aspectRatio: "1 / 1",
+                          objectFit: "contain",
+                          display: "block",
+                          opacity: isSelected ? 1 : 0.42,
+                        }}
+                      />
+                      <div
+                        style={{
+                          padding: "4px",
+                          textAlign: "center",
+                          fontSize: "12px",
+                          color: isSelected ? "#ff4fa3" : "#9ca3af",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {isSelected ? "選択中" : "未選択"}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
