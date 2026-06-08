@@ -2768,15 +2768,7 @@ function App() {
     reader.readAsDataURL(file);
   };
 
-  const getApiBase = () => {
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-    const isPrivateNetworkHost = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(hostname);
-
-    if (isLocalhost) return "http://localhost:3001";
-    if (isPrivateNetworkHost) return `http://${hostname}:3001`;
-    return "";
-  };
+  const getImportEndpoint = () => "/.netlify/functions/import-plusmember";
 
   const getProfileImageDedupKey = (item: ImportedProfileImage) =>
     item.imageUrl || item.image;
@@ -2830,7 +2822,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${getApiBase()}/api/import-plusmember?mode=profile&url=${encodeURIComponent(url)}`
+        `${getImportEndpoint()}?mode=profile&url=${encodeURIComponent(url)}`
       );
 
       if (!response.ok) {
@@ -2869,7 +2861,7 @@ function App() {
         `プロフィール画像を${dedupedImages.length}枚取得しました。保存済み画像へ${addedCount}枚追加しました。`
       );
     } catch {
-      alert("プロフィール画像の取得に失敗しました。ローカルAPIまたはURLを確認してね。");
+      alert("プロフィール画像の取得に失敗しました。URLまたはNetlify Functionを確認してね。");
     } finally {
       setIsImportingProfileImages(false);
     }
@@ -2952,7 +2944,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${getApiBase()}/api/import-plusmember?url=${encodeURIComponent(url)}`
+        `${getImportEndpoint()}?url=${encodeURIComponent(url)}`
       );
 
       if (!response.ok) {
