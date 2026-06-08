@@ -1108,15 +1108,167 @@ function App() {
 
         if (resolvedLayout === "fixedFive" && normalCardCount === 5) {
           // Plusmemberの「1メンバー5種」画像は、上段3枚・下段2枚の固定配置。
-          // 商品によってカード周辺の余白量が違うため、余白を広く残すよりも
-          // カード本体を優先して切り出す。これで次の段のカードが混ざるズレを防ぐ。
-          const regions = [
-            { x: width * 0.105, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
-            { x: width * 0.395, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
-            { x: width * 0.685, y: height * 0.09, width: width * 0.21, height: height * 0.37 },
-            { x: width * 0.255, y: height * 0.585, width: width * 0.21, height: height * 0.37 },
-            { x: width * 0.535, y: height * 0.585, width: width * 0.21, height: height * 0.37 },
+          // ただしVolごとにカード幅・余白が微妙に違うため、単純な固定座標ではなく、
+          // 上段/下段ごとにカードの横位置を検出してから切り出す。
+          // 検出できない場合だけ、従来の固定座標へフォールバックする。
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+
+          const context = canvas.getContext("2d");
+          if (!context) {
+            const fallbackRegions = [
+              { x: width * 0.09, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+              { x: width * 0.3775, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+              { x: width * 0.665, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+              { x: width * 0.235, y: height * 0.555, width: width * 0.245, height: height * 0.405 },
+              { x: width * 0.52, y: height * 0.555, width: width * 0.245, height: height * 0.405 },
+            ];
+            const fixedCrops = await cropImageByRegions(sourceImage, fallbackRegions);
+            resolve(fixedCrops.slice(0, normalCardCount));
+            return;
+          }
+
+          context.drawImage(image, 0, 0);
+          const imageData = context.getImageData(0, 0, width, height);
+          const pixels = imageData.data;
+
+          const isNonBackgroundPixel = (x: number, y: number) => {
+            const index = (y * width + x) * 4;
+            const r = pixels[index];
+            const g = pixels[index + 1];
+            const b = pixels[index + 2];
+            const a = pixels[index + 3];
+
+            if (a < 10) return false;
+
+            // 真っ白背景だけを除外する。薄いグレー/薄いピンクのカード下部は残したいので、
+            // 以前より白判定を少し厳しめにする。
+            return !(r > 250 && g > 250 && b > 250);
+          };
+
+          const detectRegionsInRow = (
+            rowStartRatio: number,
+            rowEndRatio: number,
+            expectedCount: number
+          ) => {
+            const yStart = Math.max(0, Math.floor(height * rowStartRatio));
+            const yEnd = Math.min(height - 1, Math.ceil(height * rowEndRatio));
+            const bandHeight = Math.max(1, yEnd - yStart + 1);
+            const xScores = Array.from({ length: width }, () => 0);
+
+            for (let y = yStart; y <= yEnd; y += 1) {
+              for (let x = 0; x < width; x += 1) {
+                if (isNonBackgroundPixel(x, y)) {
+                  xScores[x] += 1;
+                }
+              }
+            }
+
+            const xThreshold = Math.max(4, Math.round(bandHeight * 0.08));
+            const rawRuns: Array<{ start: number; end: number }> = [];
+            let runStart: number | null = null;
+
+            for (let x = 0; x < width; x += 1) {
+              if (xScores[x] >= xThreshold) {
+                if (runStart === null) runStart = x;
+              } else if (runStart !== null) {
+                rawRuns.push({ start: runStart, end: x - 1 });
+                runStart = null;
+              }
+            }
+
+            if (runStart !== null) {
+              rawRuns.push({ start: runStart, end: width - 1 });
+            }
+
+            const mergedRuns: Array<{ start: number; end: number }> = [];
+            const maxGap = Math.max(6, Math.round(width * 0.018));
+
+            rawRuns.forEach((run) => {
+              const previous = mergedRuns[mergedRuns.length - 1];
+
+              if (previous && run.start - previous.end <= maxGap) {
+                previous.end = run.end;
+                return;
+              }
+
+              mergedRuns.push({ ...run });
+            });
+
+            const candidateRuns = mergedRuns
+              .map((run) => ({
+                ...run,
+                width: run.end - run.start + 1,
+              }))
+              .filter((run) => run.width >= width * 0.12 && run.width <= width * 0.34)
+              .sort((a, b) => b.width - a.width)
+              .slice(0, expectedCount)
+              .sort((a, b) => a.start - b.start);
+
+            if (candidateRuns.length !== expectedCount) {
+              return [];
+            }
+
+            return candidateRuns.map((run) => {
+              let y1 = yEnd;
+              let y2 = yStart;
+
+              for (let y = yStart; y <= yEnd; y += 1) {
+                let rowScore = 0;
+
+                for (let x = run.start; x <= run.end; x += 1) {
+                  if (isNonBackgroundPixel(x, y)) {
+                    rowScore += 1;
+                  }
+                }
+
+                if (rowScore >= Math.max(3, Math.round((run.end - run.start + 1) * 0.08))) {
+                  if (y < y1) y1 = y;
+                  if (y > y2) y2 = y;
+                }
+              }
+
+              if (y2 <= y1) {
+                y1 = yStart;
+                y2 = yEnd;
+              }
+
+              const detectedWidth = run.end - run.start + 1;
+              const detectedHeight = y2 - y1 + 1;
+              const xPadding = Math.max(4, Math.round(detectedWidth * 0.045));
+              const topPadding = Math.max(4, Math.round(detectedHeight * 0.035));
+              const bottomPadding = Math.max(8, Math.round(detectedHeight * 0.08));
+
+              const x = Math.max(0, run.start - xPadding);
+              const y = Math.max(yStart, y1 - topPadding);
+              const regionWidth = Math.min(width - x, detectedWidth + xPadding * 2);
+              const regionHeight = Math.min(yEnd - y + 1, detectedHeight + topPadding + bottomPadding);
+
+              return {
+                x,
+                y,
+                width: regionWidth,
+                height: regionHeight,
+              };
+            });
+          };
+
+          const detectedRegions = [
+            ...detectRegionsInRow(0.02, 0.50, 3),
+            ...detectRegionsInRow(0.50, 0.99, 2),
           ];
+
+          const regions =
+            detectedRegions.length === 5
+              ? detectedRegions
+              : [
+                  { x: width * 0.09, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+                  { x: width * 0.3775, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+                  { x: width * 0.665, y: height * 0.075, width: width * 0.245, height: height * 0.405 },
+                  { x: width * 0.235, y: height * 0.555, width: width * 0.245, height: height * 0.405 },
+                  { x: width * 0.52, y: height * 0.555, width: width * 0.245, height: height * 0.405 },
+                ];
 
           const fixedCrops = await cropImageByRegions(sourceImage, regions);
           resolve(fixedCrops.slice(0, normalCardCount));
