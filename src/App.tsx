@@ -15,6 +15,8 @@ type AppProduct = BaseProduct & {
   importedMemberImageCount?: number;
 };
 
+type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "detect";
+
 const groupLabels: Record<GroupFilter, string> = {
   all: "すべて",
   equal_love: "=LOVE",
@@ -191,6 +193,8 @@ function App() {
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
   const [newProductImportImageStart, setNewProductImportImageStart] = useState(1);
   const [newProductImportImageLimit, setNewProductImportImageLimit] = useState(0);
+  const [newProductImportImageLayout, setNewProductImportImageLayout] =
+    useState<ImportImageLayout>("auto");
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductName, setEditingProductName] = useState("");
@@ -1003,11 +1007,147 @@ function App() {
     });
   };
 
+  const cropImageByRegions = (
+    sourceImage: string,
+    regions: Array<{ x: number; y: number; width: number; height: number }>
+  ) => {
+    return new Promise<string[]>((resolve) => {
+      if (!sourceImage || regions.length === 0) {
+        resolve([]);
+        return;
+      }
+
+      const image = new Image();
+
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          resolve([]);
+          return;
+        }
+
+        context.drawImage(image, 0, 0);
+
+        const cropped = regions
+          .map((region) => {
+            const sx = Math.max(0, Math.round(region.x));
+            const sy = Math.max(0, Math.round(region.y));
+            const sw = Math.min(image.width - sx, Math.round(region.width));
+            const sh = Math.min(image.height - sy, Math.round(region.height));
+
+            if (sw <= 0 || sh <= 0) return "";
+
+            const scale = 3;
+            const cropCanvas = document.createElement("canvas");
+            cropCanvas.width = Math.floor(sw * scale);
+            cropCanvas.height = Math.floor(sh * scale);
+
+            const cropContext = cropCanvas.getContext("2d");
+            if (!cropContext) return "";
+
+            cropContext.imageSmoothingEnabled = true;
+            cropContext.imageSmoothingQuality = "high";
+            cropContext.drawImage(
+              canvas,
+              sx,
+              sy,
+              sw,
+              sh,
+              0,
+              0,
+              cropCanvas.width,
+              cropCanvas.height
+            );
+
+            return cropCanvas.toDataURL("image/png");
+          })
+          .filter(Boolean);
+
+        resolve(cropped);
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = sourceImage;
+    });
+  };
+
+  const splitImportedMemberImage = (
+    sourceImage: string,
+    normalCardCount: number,
+    layout: ImportImageLayout
+  ) => {
+    return new Promise<string[]>((resolve) => {
+      if (!sourceImage || normalCardCount <= 0) {
+        resolve([]);
+        return;
+      }
+
+      const image = new Image();
+
+      image.onload = async () => {
+        const width = image.width;
+        const height = image.height;
+        const resolvedLayout =
+          layout === "auto"
+            ? normalCardCount === 5
+              ? "fixedFive"
+              : normalCardCount === 2
+              ? "vertical"
+              : "detect"
+            : layout;
+
+        if (resolvedLayout === "detect") {
+          const detected = await detectCardImagesFromLineupImage(sourceImage, normalCardCount);
+          resolve(detected.slice(0, normalCardCount));
+          return;
+        }
+
+        if (resolvedLayout === "fixedFive" && normalCardCount === 5) {
+          const regions = [
+            { x: width * 0.02, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
+            { x: width * 0.345, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
+            { x: width * 0.67, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
+            { x: width * 0.17, y: height * 0.43, width: width * 0.31, height: height * 0.55 },
+            { x: width * 0.52, y: height * 0.43, width: width * 0.31, height: height * 0.55 },
+          ];
+
+          const fixedCrops = await cropImageByRegions(sourceImage, regions);
+          resolve(fixedCrops.slice(0, normalCardCount));
+          return;
+        }
+
+        if (resolvedLayout === "vertical") {
+          const regions = Array.from({ length: normalCardCount }, (_, index) => ({
+            x: 0,
+            y: (height / normalCardCount) * index,
+            width,
+            height: height / normalCardCount,
+          }));
+
+          const fixedCrops = await cropImageByRegions(sourceImage, regions);
+          resolve(fixedCrops.slice(0, normalCardCount));
+          return;
+        }
+
+        const fallback = await detectCardImagesFromLineupImage(sourceImage, normalCardCount);
+        resolve(fallback.slice(0, normalCardCount));
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = sourceImage;
+    });
+  };
+
   const applyImportedMemberImages = async (
     productId: string,
     targetMembers: Member[],
     sourceImages: string[],
-    normalCardCount: number
+    normalCardCount: number,
+    importImageLayout: ImportImageLayout
   ) => {
     if (sourceImages.length === 0 || targetMembers.length === 0) return;
 
@@ -1024,8 +1164,12 @@ function App() {
 
       if (!sourceImage) continue;
 
-      const detectedImages = await detectCardImagesFromLineupImage(sourceImage, normalCardCount);
-      const imagesToApply = detectedImages.slice(0, normalCardCount);
+      const splitImages = await splitImportedMemberImage(
+        sourceImage,
+        normalCardCount,
+        importImageLayout
+      );
+      const imagesToApply = splitImages.slice(0, normalCardCount);
       allCrops.push(...imagesToApply);
 
       for (let cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
@@ -1598,6 +1742,9 @@ function App() {
           ? data.product.memberImages.map((image: unknown) => String(image)).filter(Boolean)
           : []
       );
+      setNewProductImportImageStart(1);
+      setNewProductImportImageLimit(0);
+      setNewProductImportImageLayout("auto");
 
       alert(
         `商品情報を取得しました。メンバー別画像は${Array.isArray(data.product.memberImages) ? data.product.memberImages.length : 0}枚見つかりました。対象メンバーを確認してから「商品を追加」を押してね。`
@@ -1671,7 +1818,8 @@ function App() {
         id,
         targetMembers,
         memberImagesToApply,
-        Math.max(1, newProductNormalCardCount)
+        Math.max(1, newProductNormalCardCount),
+        newProductImportImageLayout
       );
     }
 
@@ -1686,6 +1834,7 @@ function App() {
     setPendingProductMemberImages([]);
     setNewProductImportImageStart(1);
     setNewProductImportImageLimit(0);
+    setNewProductImportImageLayout("auto");
   };
 
   const openProductEditor = (product: AppProduct) => {
@@ -2288,7 +2437,7 @@ function App() {
                 メンバー別画像：{pendingProductMemberImages.length}枚
               </div>
               <p style={{ color: "#666", fontSize: "13px", marginBottom: "10px" }}>
-                通常商品は1番から対象メンバー順に自動割り当て。イコノイジョイ混在商品は、グループごとの開始番号と使用枚数を指定して分割登録できる。
+                通常商品は1番から対象メンバー順に自動割り当て。混在商品は、グループごとの開始番号と使用する元画像数を指定して分割登録できる。2種が縦に並ぶ商品は「縦2枚」を選んでね。
               </p>
 
               <div
@@ -2316,7 +2465,7 @@ function App() {
                 </label>
 
                 <label style={{ fontWeight: "bold", color: "#374151" }}>
-                  使用画像数（0で対象メンバー数）
+                  使用する元画像数（0で対象メンバー数）
                   <input
                     type="number"
                     min="0"
@@ -2331,6 +2480,29 @@ function App() {
                   />
                 </label>
               </div>
+
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  color: "#374151",
+                  marginBottom: "10px",
+                }}
+              >
+                切り出し方式
+                <select
+                  value={newProductImportImageLayout}
+                  onChange={(event) =>
+                    setNewProductImportImageLayout(event.target.value as ImportImageLayout)
+                  }
+                  style={{ ...inputStyle, marginTop: "6px" }}
+                >
+                  <option value="auto">自動（5枚商品/縦2枚商品を推定）</option>
+                  <option value="fixedFive">通常5枚（上3枚・下2枚）</option>
+                  <option value="vertical">縦並び（2枚商品・縦に同一メンバー）</option>
+                  <option value="detect">従来の自動検出</option>
+                </select>
+              </label>
 
               <div
                 style={{
@@ -2352,7 +2524,15 @@ function App() {
                       : getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length) -
                     1
                 )}
-                番
+                番 / 切り出し方式：{
+                  newProductImportImageLayout === "auto"
+                    ? "自動"
+                    : newProductImportImageLayout === "fixedFive"
+                    ? "通常5枚"
+                    : newProductImportImageLayout === "vertical"
+                    ? "縦並び"
+                    : "従来検出"
+                }
               </div>
 
               <div
