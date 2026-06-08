@@ -97,6 +97,48 @@ function createCards(product: AppProduct): CardDefinition[] {
   return [...normalCards, { id: "secret", label: "？", isSecret: true }];
 }
 
+function getExpandedCardCropArea(
+  box: { x1: number; y1: number; x2: number; y2: number },
+  imageWidth: number,
+  imageHeight: number
+) {
+  const boxWidth = box.x2 - box.x1 + 1;
+  const boxHeight = box.y2 - box.y1 + 1;
+
+  // ミニフォト本体は約55mm×89mm。
+  // 自動検出は人物・文字などの色付き部分を拾うため、白い下部ロゴ領域を取り逃がしやすい。
+  // そのため、検出枠からカード全体比率に近づくように下方向を広めに残す。
+  const cardAspectRatio = 55 / 89;
+  const horizontalPadding = Math.max(8, Math.round(boxWidth * 0.06));
+  const topPadding = Math.max(6, Math.round(boxHeight * 0.04));
+  const bottomPadding = Math.max(24, Math.round(boxHeight * 0.28));
+
+  let cropWidth = boxWidth + horizontalPadding * 2;
+  let cropHeight = boxHeight + topPadding + bottomPadding;
+  cropHeight = Math.max(cropHeight, Math.round(cropWidth / cardAspectRatio));
+
+  let cropX = box.x1 - horizontalPadding;
+  let cropY = box.y1 - topPadding;
+
+  if (cropX < 0) cropX = 0;
+  if (cropY < 0) cropY = 0;
+
+  if (cropX + cropWidth > imageWidth) {
+    cropX = Math.max(0, imageWidth - cropWidth);
+  }
+
+  if (cropY + cropHeight > imageHeight) {
+    cropY = Math.max(0, imageHeight - cropHeight);
+  }
+
+  const sx = Math.max(0, Math.floor(cropX));
+  const sy = Math.max(0, Math.floor(cropY));
+  const sw = Math.max(1, Math.min(imageWidth - sx, Math.ceil(cropWidth)));
+  const sh = Math.max(1, Math.min(imageHeight - sy, Math.ceil(cropHeight)));
+
+  return { sx, sy, sw, sh };
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<"collection" | "products" | "members" | "data">(() => {
     const saved = localStorage.getItem("activeTab");
@@ -924,11 +966,7 @@ function App() {
         }
 
         const nextCrops = sortedBoxes.map((box) => {
-          const padding = 6;
-          const sx = Math.max(0, box.x1 - padding);
-          const sy = Math.max(0, box.y1 - padding);
-          const sw = Math.min(width - sx, box.x2 - box.x1 + 1 + padding * 2);
-          const sh = Math.min(height - sy, box.y2 - box.y1 + 1 + padding * 2);
+          const { sx, sy, sw, sh } = getExpandedCardCropArea(box, width, height);
 
           const scale = 3;
           const cropCanvas = document.createElement("canvas");
@@ -1165,11 +1203,7 @@ function App() {
       }
 
       const nextCrops = sortedBoxes.map((box) => {
-        const padding = 6;
-        const sx = Math.max(0, box.x1 - padding);
-        const sy = Math.max(0, box.y1 - padding);
-        const sw = Math.min(width - sx, box.x2 - box.x1 + 1 + padding * 2);
-        const sh = Math.min(height - sy, box.y2 - box.y1 + 1 + padding * 2);
+        const { sx, sy, sw, sh } = getExpandedCardCropArea(box, width, height);
 
         const scale = 3;
         const cropCanvas = document.createElement("canvas");
