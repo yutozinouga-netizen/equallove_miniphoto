@@ -419,16 +419,15 @@ function App() {
       >
         {image ? (
           <img
-           src={image}
-           alt={card.label}
-          style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          display: "block",
-          background: "white",
-  }}
-/>
+            src={image}
+            alt={member.name}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
         ) : (
           member.name.slice(0, 1)
         )}
@@ -3124,7 +3123,9 @@ function App() {
                             style={{
                               width: "100%",
                               height: "100%",
-                              objectFit: "cover",
+                              objectFit: "contain",
+                              display: "block",
+                              background: "white",
                             }}
                           />
                         ) : card.isSecret ? (
