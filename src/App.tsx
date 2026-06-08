@@ -12,6 +12,7 @@ type CardDefinition = {
 
 type AppProduct = BaseProduct & {
   targetMemberIds?: string[];
+  importedMemberImageCount?: number;
 };
 
 const groupLabels: Record<GroupFilter, string> = {
@@ -145,6 +146,7 @@ function App() {
   const [newProductTargetGroup, setNewProductTargetGroup] = useState<GroupId>("equal_love");
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
+  const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductName, setEditingProductName] = useState("");
@@ -782,6 +784,239 @@ function App() {
     }
   };
 
+  const detectCardImagesFromLineupImage = (lineupImage: string, targetCardCount: number) => {
+    return new Promise<string[]>((resolve) => {
+      if (!lineupImage || targetCardCount <= 0) {
+        resolve([]);
+        return;
+      }
+
+      const image = new Image();
+
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          resolve([]);
+          return;
+        }
+
+        context.drawImage(image, 0, 0);
+
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const { data, width, height } = imageData;
+
+        const isCardPixel = (x: number, y: number) => {
+          const index = (y * width + x) * 4;
+          const r = data[index];
+          const g = data[index + 1];
+          const b = data[index + 2];
+
+          return !(r > 245 && g > 245 && b > 245);
+        };
+
+        const visited = new Uint8Array(width * height);
+        const boxes: Array<{ x1: number; y1: number; x2: number; y2: number; area: number }> = [];
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const startIndex = y * width + x;
+
+            if (visited[startIndex] || !isCardPixel(x, y)) {
+              continue;
+            }
+
+            const queue: Array<[number, number]> = [[x, y]];
+            visited[startIndex] = 1;
+
+            let x1 = x;
+            let y1 = y;
+            let x2 = x;
+            let y2 = y;
+            let area = 0;
+
+            while (queue.length > 0) {
+              const [cx, cy] = queue.pop()!;
+              area += 1;
+
+              if (cx < x1) x1 = cx;
+              if (cy < y1) y1 = cy;
+              if (cx > x2) x2 = cx;
+              if (cy > y2) y2 = cy;
+
+              const neighbors = [
+                [cx + 1, cy],
+                [cx - 1, cy],
+                [cx, cy + 1],
+                [cx, cy - 1],
+              ];
+
+              neighbors.forEach(([nx, ny]) => {
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+
+                const neighborIndex = ny * width + nx;
+
+                if (visited[neighborIndex] || !isCardPixel(nx, ny)) return;
+
+                visited[neighborIndex] = 1;
+                queue.push([nx, ny]);
+              });
+            }
+
+            const boxWidth = x2 - x1 + 1;
+            const boxHeight = y2 - y1 + 1;
+            const aspect = boxWidth / boxHeight;
+
+            if (
+              area > 300 &&
+              boxWidth > 20 &&
+              boxHeight > 35 &&
+              aspect > 0.35 &&
+              aspect < 0.95
+            ) {
+              boxes.push({ x1, y1, x2, y2, area });
+            }
+          }
+        }
+
+        const mergedBoxes: typeof boxes = [];
+
+        boxes
+          .sort((a, b) => b.area - a.area)
+          .forEach((box) => {
+            const overlaps = mergedBoxes.some((existing) => {
+              const ix1 = Math.max(existing.x1, box.x1);
+              const iy1 = Math.max(existing.y1, box.y1);
+              const ix2 = Math.min(existing.x2, box.x2);
+              const iy2 = Math.min(existing.y2, box.y2);
+
+              if (ix2 <= ix1 || iy2 <= iy1) return false;
+
+              const intersection = (ix2 - ix1) * (iy2 - iy1);
+              const boxArea = (box.x2 - box.x1) * (box.y2 - box.y1);
+
+              return intersection / boxArea > 0.35;
+            });
+
+            if (!overlaps) {
+              mergedBoxes.push(box);
+            }
+          });
+
+        const sortedBoxes = mergedBoxes
+          .sort((a, b) => {
+            const rowThreshold = Math.max(12, (a.y2 - a.y1) * 0.45);
+
+            if (Math.abs(a.y1 - b.y1) > rowThreshold) {
+              return a.y1 - b.y1;
+            }
+
+            return a.x1 - b.x1;
+          })
+          .slice(0, targetCardCount);
+
+        if (sortedBoxes.length === 0) {
+          resolve([]);
+          return;
+        }
+
+        const nextCrops = sortedBoxes.map((box) => {
+          const padding = 6;
+          const sx = Math.max(0, box.x1 - padding);
+          const sy = Math.max(0, box.y1 - padding);
+          const sw = Math.min(width - sx, box.x2 - box.x1 + 1 + padding * 2);
+          const sh = Math.min(height - sy, box.y2 - box.y1 + 1 + padding * 2);
+
+          const scale = 3;
+          const cropCanvas = document.createElement("canvas");
+          cropCanvas.width = Math.floor(sw * scale);
+          cropCanvas.height = Math.floor(sh * scale);
+
+          const cropContext = cropCanvas.getContext("2d");
+          if (!cropContext) return "";
+
+          cropContext.imageSmoothingEnabled = true;
+          cropContext.imageSmoothingQuality = "high";
+          cropContext.drawImage(
+            canvas,
+            sx,
+            sy,
+            sw,
+            sh,
+            0,
+            0,
+            cropCanvas.width,
+            cropCanvas.height
+          );
+
+          return cropCanvas.toDataURL("image/png");
+        }).filter(Boolean);
+
+        resolve(nextCrops);
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = lineupImage;
+    });
+  };
+
+  const applyImportedMemberImages = async (
+    productId: string,
+    targetMembers: Member[],
+    sourceImages: string[],
+    normalCardCount: number
+  ) => {
+    if (sourceImages.length === 0 || targetMembers.length === 0) return;
+
+    const cards = Array.from({ length: normalCardCount }, (_, index) => ({
+      id: `card${index + 1}`,
+    }));
+
+    const nextCardImages: Record<string, string> = {};
+    const allCrops: string[] = [];
+
+    for (let memberIndex = 0; memberIndex < targetMembers.length; memberIndex += 1) {
+      const member = targetMembers[memberIndex];
+      const sourceImage = sourceImages[memberIndex];
+
+      if (!sourceImage) continue;
+
+      const detectedImages = await detectCardImagesFromLineupImage(sourceImage, normalCardCount);
+      const imagesToApply = detectedImages.slice(0, normalCardCount);
+      allCrops.push(...imagesToApply);
+
+      for (let cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
+        const image = imagesToApply[cardIndex];
+        if (!image) continue;
+
+        const compressedImage = await compressImageForStorage(image);
+        const cardId = `${member.id}-${productId}-${cards[cardIndex].id}`;
+        nextCardImages[cardId] = compressedImage;
+      }
+    }
+
+    if (Object.keys(nextCardImages).length > 0) {
+      setCardImages((prev) => ({
+        ...prev,
+        ...nextCardImages,
+      }));
+    }
+
+    if (allCrops.length > 0) {
+      const compressedCrops = await Promise.all(
+        allCrops.map((image) => compressImageForStorage(image))
+      );
+
+      setProductCroppedImages((prev) => ({
+        ...prev,
+        [productId]: compressedCrops,
+      }));
+    }
+  };
+
   const generateDetectedCropPreview = async (product: AppProduct) => {
     const lineupImage = productLineupImages[product.id];
 
@@ -1322,9 +1557,14 @@ function App() {
       setNewProductNormalCardCount(Number(data.product.normalCardCount ?? 5));
       setNewProductHasSecret(Boolean(data.product.hasSecret ?? true));
       setPendingProductLineupImage(String(data.product.lineupImage ?? ""));
+      setPendingProductMemberImages(
+        Array.isArray(data.product.memberImages)
+          ? data.product.memberImages.map((image: unknown) => String(image)).filter(Boolean)
+          : []
+      );
 
       alert(
-        "商品情報を取得しました。プレビューを確認して、対象グループ・対象メンバーを選んでから「商品を追加」を押してね。"
+        `商品情報を取得しました。メンバー別画像は${Array.isArray(data.product.memberImages) ? data.product.memberImages.length : 0}枚見つかりました。対象メンバーを確認してから「商品を追加」を押してね。`
       );
     } catch {
       alert(
@@ -1335,7 +1575,7 @@ function App() {
     }
   };
 
-  const addProduct = () => {
+  const addProduct = async () => {
     const name = newProductName.trim();
 
     if (!name) {
@@ -1349,16 +1589,21 @@ function App() {
       "_" +
       Date.now();
 
+    const targetMembers =
+      newProductTargetMemberIds.length > 0
+        ? getTargetMembers(newProductTargetGroup, newProductTargetMemberIds)
+        : getTargetMembers(newProductTargetGroup, []);
+
+    const targetMemberIds = targetMembers.map((member) => member.id);
+
     const nextProduct: AppProduct = {
       id,
       name,
       releaseDate: newProductReleaseDate || "未設定",
       normalCardCount: Math.max(1, newProductNormalCardCount),
       hasSecret: newProductHasSecret,
-      targetMemberIds:
-        newProductTargetMemberIds.length > 0
-          ? newProductTargetMemberIds
-          : getTargetMembers(newProductTargetGroup, []).map((member) => member.id),
+      targetMemberIds,
+      importedMemberImageCount: pendingProductMemberImages.length,
     };
 
     setProducts((prev) => [...prev, nextProduct]);
@@ -1370,6 +1615,21 @@ function App() {
       }));
     }
 
+    if (pendingProductMemberImages.length > 0) {
+      if (pendingProductMemberImages.length < targetMembers.length) {
+        alert(
+          `メンバー別画像は${pendingProductMemberImages.length}枚、対象メンバーは${targetMembers.length}人です。足りない分は画像なしで登録します。対象メンバーのチェックを確認してね。`
+        );
+      }
+
+      await applyImportedMemberImages(
+        id,
+        targetMembers,
+        pendingProductMemberImages,
+        Math.max(1, newProductNormalCardCount)
+      );
+    }
+
     setProductUrl("");
     setNewProductName("");
     setNewProductReleaseDate("");
@@ -1378,6 +1638,7 @@ function App() {
     setNewProductTargetGroup("equal_love");
     setNewProductTargetMemberIds([]);
     setPendingProductLineupImage("");
+    setPendingProductMemberImages([]);
   };
 
   const openProductEditor = (product: AppProduct) => {
@@ -1846,7 +2107,7 @@ function App() {
           />
 
           <p style={{ color: "#666", fontSize: "13px", margin: 0 }}>
-            URL取込後、商品名・発売日・画像プレビューを確認してから、対象グループと対象メンバーを選んで追加する。
+            URL取込後、商品名・発売日・メンバー別画像を確認してから、対象グループと対象メンバーを選んで追加する。画像はあいうえお順で自動割り当て。
           </p>
 
           <button
@@ -1967,6 +2228,65 @@ function App() {
             )}
           </div>
 
+          {pendingProductMemberImages.length > 0 && (
+            <div
+              style={{
+                padding: "12px",
+                borderRadius: "12px",
+                background: "#fff7fb",
+                border: "1px solid #f3d9e8",
+              }}
+            >
+              <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
+                メンバー別画像：{pendingProductMemberImages.length}枚
+              </div>
+              <p style={{ color: "#666", fontSize: "13px", marginBottom: "10px" }}>
+                商品追加時に、対象メンバーのあいうえお順へ上から順番に割り当てる。11人時代は齊藤なぎさをメンバー追加してチェックに含めてね。
+              </p>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
+                  gap: "8px",
+                }}
+              >
+                {pendingProductMemberImages.slice(0, 40).map((image, index) => (
+                  <div
+                    key={`${image}-${index}`}
+                    style={{
+                      border: "1px solid #f3d9e8",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                      background: "white",
+                    }}
+                  >
+                    <img
+                      src={image}
+                      alt={`メンバー別画像 ${index + 1}`}
+                      style={{
+                        width: "100%",
+                        aspectRatio: "1 / 1",
+                        objectFit: "contain",
+                        display: "block",
+                      }}
+                    />
+                    <div
+                      style={{
+                        padding: "4px",
+                        textAlign: "center",
+                        fontSize: "12px",
+                        color: "#6b7280",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {index + 1}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div
             style={{
               padding: "12px",
@@ -2078,6 +2398,11 @@ function App() {
                       <div style={{ color: "#666", fontSize: "14px" }}>
                         ラインナップ画像：{lineupImage ? "登録済み" : "未登録"}
                       </div>
+                      {product.importedMemberImageCount ? (
+                        <div style={{ color: "#666", fontSize: "14px" }}>
+                          URL取込メンバー別画像：{product.importedMemberImageCount}枚
+                        </div>
+                      ) : null}
                     </div>
 
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
