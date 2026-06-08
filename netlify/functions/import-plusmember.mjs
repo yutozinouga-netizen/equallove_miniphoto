@@ -364,16 +364,12 @@ async function importProfileImages(profileUrl) {
     try {
       if (!entry.imageUrl) continue;
 
-      const image = await imageToDataUrl(entry.imageUrl, profileUrl);
-
-      if (image) {
-        profileImages.push({
-          name: entry.name,
-          profileUrl: entry.profileUrl,
-          imageUrl: entry.imageUrl,
-          image,
-        });
-      }
+      profileImages.push({
+  name: entry.name,
+  profileUrl: entry.profileUrl,
+  imageUrl: entry.imageUrl,
+  image: entry.imageUrl,
+});
     } catch (error) {
       console.warn(`プロフィール画像取得に失敗しました: ${entry.profileUrl}`, error);
     }
