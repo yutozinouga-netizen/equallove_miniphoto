@@ -22,6 +22,8 @@ type AppMember = Member & {
 
 type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "grid3x2" | "detect";
 type ProductTargetGroup = GroupId | "all_groups";
+type ProductSortMode = "releaseAsc" | "releaseDesc" | "manual";
+type CollectionOwnedFilter = "all" | "owned" | "missing" | "incomplete" | "complete";
 const NO_TARGET_MEMBER_SELECTION = "__none__";
 
 const groupLabels: Record<GroupFilter, string> = {
@@ -50,6 +52,20 @@ const groupThemes: Record<GroupId, { main: string; pale: string; border: string;
   nearly_equal_joy: { main: "#facc15", pale: "#fff7cc", border: "#fde68a", text: "#92400e" },
 };
 
+const allGroupsTheme = { main: "#94a3b8", pale: "#f8fafc", border: "#e2e8f0", text: "#475569" };
+
+type ImportedProfileImage = {
+  image: string;
+  imageUrl?: string;
+  name?: string;
+};
+
+const defaultProfileUrls: Record<GroupId, string> = {
+  equal_love: "https://equal-love.jp/feature/profile",
+  not_equal_me: "https://not-equal-me.jp/feature/profile",
+  nearly_equal_joy: "https://nearly-equal-joy.jp/feature/profile",
+};
+
 function getGroupTheme(group: GroupId) {
   return groupThemes[group] ?? groupThemes.equal_love;
 }
@@ -61,6 +77,91 @@ function isMemberAfterGraduation(member: Member, releaseDate: string) {
 }
 
 
+const defaultMembers: AppMember[] = [
+  { id: "otani_emiri", name: "大谷映美里", kana: "おおたにえみり", group: "equal_love", active: true, sortOrder: 1 },
+  { id: "oba_hana", name: "大場花菜", kana: "おおばはな", group: "equal_love", active: true, sortOrder: 2 },
+  { id: "otoshima_risa", name: "音嶋莉沙", kana: "おとしまりさ", group: "equal_love", active: true, sortOrder: 3 },
+  { id: "saito_kiara", name: "齋藤樹愛羅", kana: "さいとうきあら", group: "equal_love", active: true, sortOrder: 4 },
+  { id: "saito_nagisa", name: "齊藤なぎさ", kana: "さいとうなぎさ", group: "equal_love", active: true, sortOrder: 5, graduationDate: "2023-01-13" },
+  { id: "sasaki_maika", name: "佐々木舞香", kana: "ささきまいか", group: "equal_love", active: true, sortOrder: 6 },
+  { id: "takamatsu_hitomi", name: "髙松瞳", kana: "たかまつひとみ", group: "equal_love", active: true, sortOrder: 7 },
+  { id: "takiwaki_shoko", name: "瀧脇笙古", kana: "たきわきしょうこ", group: "equal_love", active: true, sortOrder: 8 },
+  { id: "noguchi_iori", name: "野口衣織", kana: "のぐちいおり", group: "equal_love", active: true, sortOrder: 9 },
+  { id: "morohashi_sana", name: "諸橋沙夏", kana: "もろはしさな", group: "equal_love", active: true, sortOrder: 10 },
+  { id: "yamamoto_anna", name: "山本杏奈", kana: "やまもとあんな", group: "equal_love", active: true, sortOrder: 11 },
+  { id: "ogi_hana", name: "尾木波菜", kana: "おぎはな", group: "not_equal_me", active: true, sortOrder: 1 },
+  { id: "ochiai_kirari", name: "落合希来里", kana: "おちあいきらり", group: "not_equal_me", active: true, sortOrder: 2 },
+  { id: "kanisawa_moeko", name: "蟹沢萌子", kana: "かにさわもえこ", group: "not_equal_me", active: true, sortOrder: 3 },
+  { id: "kawanago_natsumi", name: "川中子奈月心", kana: "かわなごなつみ", group: "not_equal_me", active: true, sortOrder: 4 },
+  { id: "kawaguchi_natsune", name: "河口夏音", kana: "かわぐちなつね", group: "not_equal_me", active: true, sortOrder: 5 },
+  { id: "suganami_mirei", name: "菅波美玲", kana: "すがなみみれい", group: "not_equal_me", active: true, sortOrder: 6 },
+  { id: "suzuki_hitomi", name: "鈴木瞳美", kana: "すずきひとみ", group: "not_equal_me", active: true, sortOrder: 7 },
+  { id: "tanizaki_saya", name: "谷崎早耶", kana: "たにざきさや", group: "not_equal_me", active: true, sortOrder: 8 },
+  { id: "tomita_nanaka", name: "冨田菜々風", kana: "とみたななか", group: "not_equal_me", active: true, sortOrder: 9 },
+  { id: "nagata_shiori", name: "永田詩央里", kana: "ながたしおり", group: "not_equal_me", active: true, sortOrder: 10 },
+  { id: "honda_miyuki", name: "本田珠由記", kana: "ほんだみゆき", group: "not_equal_me", active: true, sortOrder: 11 },
+  { id: "sakurai_momo", name: "櫻井もも", kana: "さくらいもも", group: "not_equal_me", active: true, sortOrder: 12 },
+  { id: "aida_jurii", name: "逢田珠里依", kana: "あいだじゅりい", group: "nearly_equal_joy", active: true, sortOrder: 1 },
+  { id: "amano_konoa", name: "天野香乃愛", kana: "あまのこのあ", group: "nearly_equal_joy", active: true, sortOrder: 2 },
+  { id: "ichihara_ayumi", name: "市原愛弓", kana: "いちはらあゆみ", group: "nearly_equal_joy", active: true, sortOrder: 2 },
+  { id: "esumi_renon", name: "江角怜音", kana: "えすみれのん", group: "nearly_equal_joy", active: true, sortOrder: 3 },
+  { id: "onishii_aoi", name: "大西葵", kana: "おおにしあおい", group: "nearly_equal_joy", active: true, sortOrder: 4 },
+  { id: "oshida_mitsuki", name: "大信田美月", kana: "おおしだみつき", group: "nearly_equal_joy", active: true, sortOrder: 5 },
+  { id: "ozawa_aimi", name: "小澤愛実", kana: "おざわあいみ", group: "nearly_equal_joy", active: true, sortOrder: 6 },
+  { id: "takaya_miyuki", name: "髙橋舞", kana: "たかはしまい", group: "nearly_equal_joy", active: true, sortOrder: 7 },
+  { id: "fujisawa_riko", name: "藤沢莉子", kana: "ふじさわりこ", group: "nearly_equal_joy", active: true, sortOrder: 8 },
+  { id: "murayama_yuuka", name: "村山結香", kana: "むらやまゆうか", group: "nearly_equal_joy", active: true, sortOrder: 9 },
+  { id: "yamada_momoka", name: "山田杏佳", kana: "やまだももか", group: "nearly_equal_joy", active: true, sortOrder: 10 },
+  { id: "yamano_arisu", name: "山野愛月", kana: "やまのありす", group: "nearly_equal_joy", active: true, sortOrder: 11 },
+];
+
+function normalizeMemberName(name: string) {
+  return name === "齋藤なぎさ" ? "齊藤なぎさ" : name;
+}
+
+function memberDedupKey(member: Member) {
+  const normalizedName = normalizeMemberName(member.name);
+  if (normalizedName === "齊藤なぎさ") return "equal_love:さいとうなぎさ";
+  return `${member.group}:${member.kana || normalizedName}`;
+}
+
+function normalizeMembersWithDefaults(sourceMembers: Member[]): Member[] {
+  const normalized = sourceMembers.map((member) => ({
+    ...member,
+    name: normalizeMemberName(member.name),
+    graduationDate:
+      normalizeMemberName(member.name) === "齊藤なぎさ"
+        ? ((member as AppMember).graduationDate || "2023-01-13")
+        : (member as AppMember).graduationDate,
+  })) as AppMember[];
+
+  const byKey = new Map<string, AppMember>();
+
+  [...normalized, ...defaultMembers].forEach((member) => {
+    const key = memberDedupKey(member);
+    const existing = byKey.get(key);
+
+    if (!existing) {
+      byKey.set(key, member);
+      return;
+    }
+
+    byKey.set(key, {
+      ...member,
+      ...existing,
+      name: normalizeMemberName(existing.name),
+      graduationDate: (existing as AppMember).graduationDate || member.graduationDate,
+      active: existing.active ?? member.active,
+    });
+  });
+
+  return [...byKey.values()].sort((a, b) => {
+    if (a.group !== b.group) return productTargetGroupOrder[a.group] - productTargetGroupOrder[b.group];
+    return a.kana.localeCompare(b.kana, "ja");
+  });
+}
+
+
 const IMAGE_DB_NAME = "ikonoijoy-miniphoto-images";
 const IMAGE_DB_VERSION = 1;
 const IMAGE_STORE_NAME = "imageMaps";
@@ -69,7 +170,8 @@ type ImageMapKey =
   | "cardImages"
   | "memberImages"
   | "productLineupImages"
-  | "productCroppedImages";
+  | "productCroppedImages"
+  | "savedProfileImages";
 
 function openImageDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -212,6 +314,14 @@ function App() {
   const [newMemberKana, setNewMemberKana] = useState("");
   const [newMemberGroup, setNewMemberGroup] = useState<GroupId>("not_equal_me");
   const [newMemberGraduationDate, setNewMemberGraduationDate] = useState("");
+  const [profileImportGroup, setProfileImportGroup] = useState<GroupId>("not_equal_me");
+  const [profileImportUrl, setProfileImportUrl] = useState(defaultProfileUrls.not_equal_me);
+  const [isImportingProfileImages, setIsImportingProfileImages] = useState(false);
+  const [importedProfileImages, setImportedProfileImages] = useState<ImportedProfileImage[]>([]);
+  const [savedProfileImages, setSavedProfileImages] = useState<ImportedProfileImage[]>([]);
+  const [showSavedProfileImages, setShowSavedProfileImages] = useState(false);
+  const [profileImageMemberSelections, setProfileImageMemberSelections] = useState<Record<number, string>>({});
+  const [savedProfileImageMemberSelections, setSavedProfileImageMemberSelections] = useState<Record<number, string>>({});
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberName, setEditingMemberName] = useState("");
@@ -230,11 +340,22 @@ function App() {
   const [newProductTargetMemberIds, setNewProductTargetMemberIds] = useState<string[]>([]);
   const [newProductCardCountOverrides, setNewProductCardCountOverrides] = useState<Record<string, number>>({});
   const [pendingProductLineupImage, setPendingProductLineupImage] = useState("");
+  const [showPendingProductLineupImage, setShowPendingProductLineupImage] = useState(false);
   const [pendingProductMemberImages, setPendingProductMemberImages] = useState<string[]>([]);
   const [selectedImportImageIndexes, setSelectedImportImageIndexes] = useState<number[]>([]);
   const [newProductImportImageLayout, setNewProductImportImageLayout] =
     useState<ImportImageLayout>("auto");
   const [importPresetHint, setImportPresetHint] = useState("");
+  const [productSortMode, setProductSortMode] = useState<ProductSortMode>(() => {
+    const saved = localStorage.getItem("productSortMode");
+    if (saved === "releaseAsc" || saved === "releaseDesc" || saved === "manual") {
+      return saved;
+    }
+    return "releaseAsc";
+  });
+  const [collectionProductFilter, setCollectionProductFilter] = useState("all");
+  const [collectionReleaseYearFilter, setCollectionReleaseYearFilter] = useState("all");
+  const [collectionOwnedFilter, setCollectionOwnedFilter] = useState<CollectionOwnedFilter>("all");
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editingProductName, setEditingProductName] = useState("");
@@ -243,9 +364,11 @@ function App() {
   const [editingProductHasSecret, setEditingProductHasSecret] = useState(true);
   const [editingProductTargetGroup, setEditingProductTargetGroup] = useState<ProductTargetGroup>("equal_love");
   const [editingProductTargetMemberIds, setEditingProductTargetMemberIds] = useState<string[]>([]);
-  const [editingProductCardCountOverrides] = useState<Record<string, number>>({});
+  const [editingProductCardCountOverrides, setEditingProductCardCountOverrides] = useState<Record<string, number>>({});
 
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardMode, setEditingCardMode] = useState<"menu" | "count" | "image">("menu");
+  const [selectedCroppedImageIndex, setSelectedCroppedImageIndex] = useState<number | null>(null);
   const [editingCount, setEditingCount] = useState(0);
   const [longPressTimer, setLongPressTimer] = useState<number | null>(null);
   const [longPressTriggered, setLongPressTriggered] = useState(false);
@@ -259,12 +382,12 @@ function App() {
     const saved = localStorage.getItem("members");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        return normalizeMembersWithDefaults(JSON.parse(saved));
       } catch {
-        return initialMembers;
+        return normalizeMembersWithDefaults(initialMembers);
       }
     }
-    return initialMembers;
+    return normalizeMembersWithDefaults(initialMembers);
   });
 
   const [products, setProducts] = useState<AppProduct[]>(() => {
@@ -397,13 +520,19 @@ function App() {
     let cancelled = false;
 
     const loadStoredImages = async () => {
-      const [storedCardImages, storedMemberImages, storedProductLineupImages, storedProductCroppedImages] =
-        await Promise.all([
-          loadImageMap<Record<string, string>>("cardImages", {}),
-          loadImageMap<Record<string, string>>("memberImages", {}),
-          loadImageMap<Record<string, string>>("productLineupImages", {}),
-          loadImageMap<Record<string, string[]>>("productCroppedImages", {}),
-        ]);
+      const [
+        storedCardImages,
+        storedMemberImages,
+        storedProductLineupImages,
+        storedProductCroppedImages,
+        storedSavedProfileImages,
+      ] = await Promise.all([
+        loadImageMap<Record<string, string>>("cardImages", {}),
+        loadImageMap<Record<string, string>>("memberImages", {}),
+        loadImageMap<Record<string, string>>("productLineupImages", {}),
+        loadImageMap<Record<string, string[]>>("productCroppedImages", {}),
+        loadImageMap<ImportedProfileImage[]>("savedProfileImages", []),
+      ]);
 
       if (cancelled) return;
 
@@ -411,6 +540,16 @@ function App() {
       setMemberImages(storedMemberImages);
       setProductLineupImages(storedProductLineupImages);
       setProductCroppedImages(storedProductCroppedImages);
+      setSavedProfileImages(
+        Array.isArray(storedSavedProfileImages)
+          ? dedupeProfileImages(
+              storedSavedProfileImages.filter(
+                (item) => item && typeof item.image === "string" && item.image
+              )
+            )
+          : []
+      );
+      localStorage.removeItem("savedProfileImages");
       setImageStorageReady(true);
     };
 
@@ -465,6 +604,16 @@ function App() {
     localStorage.setItem("selectedMemberId", selectedMemberId);
   }, [selectedMemberId]);
 
+  useEffect(() => {
+    localStorage.setItem("productSortMode", productSortMode);
+  }, [productSortMode]);
+
+  useEffect(() => {
+    if (!imageStorageReady) return;
+    saveImageMap("savedProfileImages", savedProfileImages);
+    localStorage.removeItem("savedProfileImages");
+  }, [savedProfileImages, imageStorageReady]);
+
   const filteredMembers = useMemo(() => {
     return members
       .filter((member) => member.active)
@@ -485,7 +634,77 @@ function App() {
     }
   }, [members, selectedMember, selectedMemberId]);
 
-  const selectedGroupTheme = getGroupTheme(selectedMember?.group ?? "equal_love");
+  const selectedGroupTheme = groupFilter === "all"
+    ? allGroupsTheme
+    : getGroupTheme(selectedMember?.group ?? "equal_love");
+
+  const themedPrimaryButtonStyle = {
+    ...primaryButtonStyle,
+    background: selectedGroupTheme.main,
+    boxShadow: `0 8px 18px ${selectedGroupTheme.border}`,
+  };
+
+  const themedActiveTabButtonStyle = {
+    ...tabButtonStyle,
+    border: `1px solid ${selectedGroupTheme.main}`,
+    background: selectedGroupTheme.pale,
+    color: selectedGroupTheme.text,
+  };
+
+  const themedSidebarActiveButtonStyle = {
+    ...sidebarButtonStyle,
+    background: selectedGroupTheme.pale,
+    color: selectedGroupTheme.text,
+  };
+
+  const themedMobileNavActiveButtonStyle = {
+    ...mobileNavButtonStyle,
+    background: selectedGroupTheme.pale,
+    color: selectedGroupTheme.text,
+  };
+
+  const groupOrderedMembers = (group: GroupId) =>
+    members
+      .filter((member) => member.active && member.group === group)
+      .sort((a, b) => a.kana.localeCompare(b.kana, "ja"));
+
+  const getProfileImportTargetMembers = (group: GroupId) =>
+    members
+      .filter((member) => {
+        if (!member.active || member.group !== group) return false;
+
+        // 公式プロフィール一覧には卒業メンバーが含まれないため、
+        // 卒業日が入っているメンバーは一括反映の対象から外す。
+        return !(member as AppMember).graduationDate;
+      })
+      .sort((a, b) => a.kana.localeCompare(b.kana, "ja"));
+
+  const renderMemberSelectOptions = () => {
+    if (groupFilter !== "all") {
+      return filteredMembers.map((member) => (
+        <option key={member.id} value={member.id}>
+          {member.name}
+        </option>
+      ));
+    }
+
+    return (["equal_love", "not_equal_me", "nearly_equal_joy"] as GroupId[]).map((group) => (
+      <optgroup key={group} label={groupLabels[group]}>
+        {groupOrderedMembers(group).map((member) => (
+          <option key={member.id} value={member.id}>
+            {member.name}
+          </option>
+        ))}
+      </optgroup>
+    ));
+  };
+
+  const renderMemberFormField = (label: string, children: any) => (
+    <label style={{ display: "grid", gap: "6px", fontWeight: "bold", color: "#374151" }}>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
 
   const renderMemberAvatar = (member: Member, size = 78) => {
     const image = memberImages[member.id];
@@ -517,6 +736,7 @@ function App() {
               width: "100%",
               height: "100%",
               objectFit: "cover",
+              objectPosition: "center 50%",
               display: "block",
             }}
           />
@@ -525,6 +745,24 @@ function App() {
         )}
       </div>
     );
+  };
+
+  const getDefaultSelectedTargetMemberIds = (
+    targetGroup: ProductTargetGroup,
+    releaseDate = ""
+  ) =>
+    getTargetMembers(targetGroup, [])
+      .filter((member) => !isMemberAfterGraduation(member, releaseDate))
+      .map((member) => member.id);
+
+  const getEditableSelectedTargetMemberIds = (
+    targetGroup: ProductTargetGroup,
+    selectedIds: string[],
+    releaseDate = ""
+  ) => {
+    if (selectedIds.includes(NO_TARGET_MEMBER_SELECTION)) return [];
+    if (selectedIds.length === 0) return getDefaultSelectedTargetMemberIds(targetGroup, releaseDate);
+    return selectedIds;
   };
 
   const getTargetMembers = (targetGroup: ProductTargetGroup, selectedIds: string[]) => {
@@ -558,12 +796,15 @@ function App() {
     selectedIds: string[],
     setSelectedIds: (ids: string[]) => void
   ) => {
-    if (selectedIds.includes(memberId)) {
-      setSelectedIds(selectedIds.filter((id) => id !== memberId));
+    const normalizedSelectedIds = selectedIds.includes(NO_TARGET_MEMBER_SELECTION) ? [] : selectedIds;
+
+    if (normalizedSelectedIds.includes(memberId)) {
+      const nextIds = normalizedSelectedIds.filter((id) => id !== memberId);
+      setSelectedIds(nextIds.length === 0 ? [NO_TARGET_MEMBER_SELECTION] : nextIds);
       return;
     }
 
-    setSelectedIds([...selectedIds, memberId]);
+    setSelectedIds([...normalizedSelectedIds, memberId]);
   };
 
   const toggleImportImageSelection = (imageIndex: number) => {
@@ -690,7 +931,8 @@ function App() {
   const applyAutoImportPreset = (
     importedImages: string[],
     importedUrl: string,
-    importedProductName: string
+    importedProductName: string,
+    importedReleaseDate = ""
   ) => {
     const inferredGroup = inferGroupFromImportedProduct(importedUrl, importedProductName);
 
@@ -701,8 +943,9 @@ function App() {
       setNewProductTargetMemberIds([]);
       setNewProductImportImageLayout("grid3x2");
 
-      const targetMemberCount = getTargetMembers("all_groups", []).length;
-      const requiredImageCount = getRequiredImportImageCount(targetMemberCount, "grid3x2", "all_groups", []);
+      const selectedIds = getDefaultSelectedTargetMemberIds("all_groups", importedReleaseDate);
+      const targetMemberCount = getTargetMembers("all_groups", selectedIds).length;
+      const requiredImageCount = getRequiredImportImageCount(targetMemberCount, "grid3x2", "all_groups", selectedIds);
       selectImportImagesByRequiredCountFrom(requiredImageCount, importedImages);
       setImportPresetHint(
         "自動判定：イコノイジョイ混在商品として、全グループ・2種・3名×縦2種に設定しました。必要なら手動で切り替えてね。"
@@ -716,7 +959,8 @@ function App() {
     setNewProductTargetMemberIds([]);
     setNewProductImportImageLayout("fixedFive");
 
-    const targetMemberCount = getTargetMembers(inferredGroup, []).length;
+    const selectedIds = getDefaultSelectedTargetMemberIds(inferredGroup, importedReleaseDate);
+    const targetMemberCount = getTargetMembers(inferredGroup, selectedIds).length;
     selectImportImagesByRequiredCountFrom(targetMemberCount, importedImages);
     setImportPresetHint(
       `自動判定：${productTargetGroupLabels[inferredGroup]}の通常商品として、5種・通常5枚切り出しに設定しました。必要なら手動で切り替えてね。`
@@ -753,15 +997,20 @@ function App() {
   useEffect(() => {
     if (pendingProductMemberImages.length === 0) return;
 
+    const selectedIds = getEditableSelectedTargetMemberIds(
+      newProductTargetGroup,
+      newProductTargetMemberIds,
+      newProductReleaseDate
+    );
     const targetMemberCount = getTargetMembers(
       newProductTargetGroup,
-      newProductTargetMemberIds
+      selectedIds
     ).length;
     const requiredImageCount = getRequiredImportImageCount(
       targetMemberCount,
       newProductImportImageLayout,
       newProductTargetGroup,
-      newProductTargetMemberIds
+      selectedIds
     );
 
     if (requiredImageCount <= 0) return;
@@ -790,6 +1039,7 @@ function App() {
     newProductImportImageLayout,
     newProductTargetGroup,
     newProductTargetMemberIds,
+    newProductReleaseDate,
   ]);
 
   const getProductTargetMembers = (product: AppProduct) => {
@@ -812,17 +1062,122 @@ function App() {
     return createCards({ ...product, normalCardCount: Math.max(1, cardCount) });
   };
 
+  const getReleaseSortValue = (releaseDate: string) => {
+    if (!releaseDate || releaseDate === "未設定") return "9999-99-99";
+    return releaseDate;
+  };
+
+  const sortProductsForDisplay = (items: AppProduct[]) => {
+    if (productSortMode === "manual") {
+      return [...items];
+    }
+
+    return [...items].sort((a, b) => {
+      const comparison = getReleaseSortValue(a.releaseDate).localeCompare(
+        getReleaseSortValue(b.releaseDate)
+      );
+
+      if (comparison !== 0) {
+        return productSortMode === "releaseAsc" ? comparison : -comparison;
+      }
+
+      return a.name.localeCompare(b.name, "ja");
+    });
+  };
+
+  const moveProduct = (productId: string, direction: -1 | 1) => {
+    setProductSortMode("manual");
+    setProducts((prev) => {
+      const currentIndex = prev.findIndex((product) => product.id === productId);
+      const nextIndex = currentIndex + direction;
+
+      if (currentIndex < 0 || nextIndex < 0 || nextIndex >= prev.length) {
+        return prev;
+      }
+
+      const next = [...prev];
+      const target = next[currentIndex];
+      next[currentIndex] = next[nextIndex];
+      next[nextIndex] = target;
+      return next;
+    });
+  };
+
+  const managedProducts = useMemo(() => {
+    return sortProductsForDisplay(products);
+  }, [products, productSortMode]);
+
+  const collectionProductOptions = useMemo(() => {
+    return sortProductsForDisplay(products);
+  }, [products, productSortMode]);
+
+  const collectionReleaseYearOptions = useMemo(() => {
+    return [...new Set(
+      products
+        .map((product) => product.releaseDate?.slice(0, 4) ?? "")
+        .filter((year) => /^\d{4}$/.test(year))
+    )].sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
   const visibleProducts = useMemo(() => {
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       const targetMemberIds = product.targetMemberIds ?? [];
 
-      if (targetMemberIds.length === 0) {
+      if (targetMemberIds.length > 0 && !targetMemberIds.includes(selectedMember.id)) {
+        return false;
+      }
+
+      if (collectionProductFilter !== "all" && product.id !== collectionProductFilter) {
+        return false;
+      }
+
+      if (
+        collectionReleaseYearFilter !== "all" &&
+        !(product.releaseDate || "").startsWith(collectionReleaseYearFilter)
+      ) {
+        return false;
+      }
+
+      if (collectionOwnedFilter === "all") {
         return true;
       }
 
-      return targetMemberIds.includes(selectedMember.id);
+      const cards = createCardsForMember(product, selectedMember.id);
+      const totalCards = cards.length;
+      const ownedUniqueCards = cards.filter((card) => {
+        const cardId = `${selectedMember.id}-${product.id}-${card.id}`;
+        return (ownedCounts[cardId] ?? 0) > 0;
+      }).length;
+
+      if (collectionOwnedFilter === "owned") {
+        return ownedUniqueCards > 0;
+      }
+
+      if (collectionOwnedFilter === "missing") {
+        return ownedUniqueCards === 0;
+      }
+
+      if (collectionOwnedFilter === "complete") {
+        return totalCards > 0 && ownedUniqueCards === totalCards;
+      }
+
+      if (collectionOwnedFilter === "incomplete") {
+        return ownedUniqueCards > 0 && ownedUniqueCards < totalCards;
+      }
+
+      return true;
     });
-  }, [products, selectedMember.id]);
+
+    return sortProductsForDisplay(filtered);
+  }, [
+    products,
+    selectedMember.id,
+    ownedCounts,
+    productSortMode,
+    collectionProductFilter,
+    collectionReleaseYearFilter,
+    collectionOwnedFilter,
+  ]);
 
   const memberStats = useMemo(() => {
     const totalCards = visibleProducts.reduce(
@@ -887,6 +1242,8 @@ function App() {
 
   const openCountEditor = (cardId: string, count: number) => {
     setEditingCardId(cardId);
+    setEditingCardMode("menu");
+    setSelectedCroppedImageIndex(null);
     setEditingCount(count);
   };
 
@@ -976,6 +1333,18 @@ function App() {
       [editingCardId]: Math.max(0, editingCount),
     }));
     setEditingCardId(null);
+    setEditingCardMode("menu");
+  };
+
+  const updateCardCountOverride = (
+    memberId: string,
+    nextValue: number,
+    setter: (updater: (prev: Record<string, number>) => Record<string, number>) => void
+  ) => {
+    setter((prev) => ({
+      ...prev,
+      [memberId]: Math.max(1, nextValue),
+    }));
   };
 
   const handleGroupChange = (value: GroupFilter) => {
@@ -2228,12 +2597,10 @@ function App() {
       const image = new Image();
 
       image.onload = () => {
-        // メンバーアイコンは丸表示用なので正方形に切り抜いて軽量保存する。
+        // メンバーアイコンは丸枠いっぱいに表示する。
+        // ただし中央切り抜きだと頭上が切れやすいため、切り抜き範囲を少し上へずらして、
+        // 画像内の人物をアイコン内で少し下に見せる。
         const maxSize = 260;
-        const sourceSize = Math.min(image.width, image.height);
-        const sx = Math.max(0, Math.round((image.width - sourceSize) / 2));
-        const sy = Math.max(0, Math.round((image.height - sourceSize) / 2));
-
         const canvas = document.createElement("canvas");
         canvas.width = maxSize;
         canvas.height = maxSize;
@@ -2247,17 +2614,25 @@ function App() {
 
         context.imageSmoothingEnabled = true;
         context.imageSmoothingQuality = "high";
-        context.drawImage(
-          image,
-          sx,
-          sy,
-          sourceSize,
-          sourceSize,
-          0,
-          0,
-          maxSize,
-          maxSize
-        );
+
+        const sourceAspect = image.width / image.height;
+        const targetAspect = 1;
+        let sx = 0;
+        let sy = 0;
+        let sw = image.width;
+        let sh = image.height;
+
+        if (sourceAspect > targetAspect) {
+          sw = image.height * targetAspect;
+          sx = (image.width - sw) / 2;
+        } else {
+          sh = image.width / targetAspect;
+          // 通常の中央切り抜きより上側を多めに残す。
+          // これにより顔・頭飾りが上で切れにくく、下側は多少切れてもよい前提にする。
+          sy = Math.max(0, (image.height - sh) * 0.12);
+        }
+
+        context.drawImage(image, sx, sy, sw, sh, 0, 0, maxSize, maxSize);
 
         resolve(canvas.toDataURL("image/jpeg", 0.84));
       };
@@ -2387,9 +2762,182 @@ function App() {
     reader.onload = async () => {
       const compressedImage = await compressLineupImageForStorage(String(reader.result));
       setPendingProductLineupImage(compressedImage);
+      setShowPendingProductLineupImage(false);
     };
 
     reader.readAsDataURL(file);
+  };
+
+  const getApiBase = () => {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    const isPrivateNetworkHost = /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(hostname);
+
+    if (isLocalhost) return "http://localhost:3001";
+    if (isPrivateNetworkHost) return `http://${hostname}:3001`;
+    return "";
+  };
+
+  const getProfileImageDedupKey = (item: ImportedProfileImage) =>
+    item.imageUrl || item.image;
+
+  const dedupeProfileImages = (images: ImportedProfileImage[]) => {
+    const seen = new Set<string>();
+    const deduped: ImportedProfileImage[] = [];
+
+    images.forEach((item) => {
+      const key = getProfileImageDedupKey(item);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      deduped.push(item);
+    });
+
+    return deduped;
+  };
+
+  const saveImportedProfileImagesToPool = (images: ImportedProfileImage[]) => {
+    if (images.length === 0) return 0;
+
+    let addedCount = 0;
+
+    setSavedProfileImages((prev) => {
+      const seen = new Set(prev.map(getProfileImageDedupKey));
+      const next = [...prev];
+
+      images.forEach((item) => {
+        const key = getProfileImageDedupKey(item);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        next.push(item);
+        addedCount += 1;
+      });
+
+      return next;
+    });
+
+    return addedCount;
+  };
+
+  const importProfileImagesFromUrl = async () => {
+    const url = profileImportUrl.trim();
+
+    if (!url) {
+      alert("プロフィールURLを入力してね");
+      return;
+    }
+
+    setIsImportingProfileImages(true);
+
+    try {
+      const response = await fetch(
+        `${getApiBase()}/api/import-plusmember?mode=profile&url=${encodeURIComponent(url)}`
+      );
+
+      if (!response.ok) {
+        throw new Error("profile image import api failed");
+      }
+
+      const data = await response.json();
+      const images = Array.isArray(data.profileImages)
+        ? data.profileImages
+            .map((item: unknown) => {
+              if (typeof item === "string") return { image: item };
+              if (item && typeof item === "object") {
+                const value = item as { image?: unknown; imageUrl?: unknown; name?: unknown };
+                return {
+                  image: String(value.image ?? ""),
+                  imageUrl: value.imageUrl ? String(value.imageUrl) : undefined,
+                  name: value.name ? String(value.name) : undefined,
+                };
+              }
+              return { image: "" };
+            })
+            .filter((item: ImportedProfileImage) => Boolean(item.image))
+        : [];
+
+      const dedupedImages = dedupeProfileImages(images);
+      const defaultSelections = Object.fromEntries(
+        getProfileImportTargetMembers(profileImportGroup)
+          .slice(0, dedupedImages.length)
+          .map((member, index) => [index, member.id])
+      );
+      const addedCount = saveImportedProfileImagesToPool(dedupedImages);
+
+      setImportedProfileImages(dedupedImages);
+      setProfileImageMemberSelections(defaultSelections);
+      alert(
+        `プロフィール画像を${dedupedImages.length}枚取得しました。保存済み画像へ${addedCount}枚追加しました。`
+      );
+    } catch {
+      alert("プロフィール画像の取得に失敗しました。ローカルAPIまたはURLを確認してね。");
+    } finally {
+      setIsImportingProfileImages(false);
+    }
+  };
+
+  const applyProfileImageToMember = async (memberId: string, image: string) => {
+    if (!image) return false;
+
+    const compressedImage = await compressMemberImageForStorage(image);
+
+    setMemberImages((prev) => ({
+      ...prev,
+      [memberId]: compressedImage,
+    }));
+
+    return true;
+  };
+
+  const applyProfileImageIndexToSelectedMember = async (imageIndex: number) => {
+    const image = importedProfileImages[imageIndex]?.image;
+    const memberId = profileImageMemberSelections[imageIndex];
+    const member = members.find((item) => item.id === memberId);
+
+    if (!image || !memberId || !member) {
+      alert("反映先メンバーを選択してね。");
+      return;
+    }
+
+    await applyProfileImageToMember(memberId, image);
+    alert(`「${member.name}」にプロフィール画像を反映しました。`);
+  };
+
+  const applySavedProfileImageIndexToSelectedMember = async (imageIndex: number) => {
+    const image = savedProfileImages[imageIndex]?.image;
+    const memberId = savedProfileImageMemberSelections[imageIndex];
+    const member = members.find((item) => item.id === memberId);
+
+    if (!image || !memberId || !member) {
+      alert("反映先メンバーを選択してね。");
+      return;
+    }
+
+    await applyProfileImageToMember(memberId, image);
+    alert(`「${member.name}」に保存済みプロフィール画像を反映しました。`);
+  };
+
+  const applyProfileImagesToGroup = async () => {
+    const targetMembers = getProfileImportTargetMembers(profileImportGroup);
+
+    if (targetMembers.length === 0 || importedProfileImages.length === 0) {
+      alert("反映する画像がありません。先にプロフィール画像を取得してね。");
+      return;
+    }
+
+    const nextImages: Record<string, string> = {};
+
+    for (let index = 0; index < targetMembers.length; index += 1) {
+      const image = importedProfileImages[index]?.image;
+      if (!image) continue;
+      nextImages[targetMembers[index].id] = await compressMemberImageForStorage(image);
+    }
+
+    setMemberImages((prev) => ({
+      ...prev,
+      ...nextImages,
+    }));
+
+    alert(`${Object.keys(nextImages).length}人分のメンバー画像を反映しました。`);
   };
 
   const importProductFromUrl = async () => {
@@ -2403,13 +2951,8 @@ function App() {
     setIsImportingProduct(true);
 
     try {
-      const isLocalDev =
-        window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1";
-      const apiBase = isLocalDev ? "http://localhost:3001" : "";
-
       const response = await fetch(
-        `${apiBase}/api/import-plusmember?url=${encodeURIComponent(url)}`
+        `${getApiBase()}/api/import-plusmember?url=${encodeURIComponent(url)}`
       );
 
       if (!response.ok) {
@@ -2437,12 +2980,18 @@ function App() {
       setNewProductNormalCardCount(Number(data.product.normalCardCount ?? 5));
       setNewProductHasSecret(Boolean(data.product.hasSecret ?? true));
       setPendingProductLineupImage(String(data.product.lineupImage ?? ""));
+      setShowPendingProductLineupImage(false);
       const importedMemberImages = Array.isArray(data.product.memberImages)
         ? data.product.memberImages.map((image: unknown) => String(image)).filter(Boolean)
         : [];
 
       setPendingProductMemberImages(importedMemberImages);
-      applyAutoImportPreset(importedMemberImages, url, name);
+      applyAutoImportPreset(
+        importedMemberImages,
+        url,
+        name,
+        data.product.releaseDate === "未設定" ? "" : data.product.releaseDate
+      );
 
       alert(
         `商品情報を取得しました。メンバー別画像は${Array.isArray(data.product.memberImages) ? data.product.memberImages.length : 0}枚見つかりました。取込タイプは自動設定済みです。必要なら手動で切り替えてから「商品を追加」を押してね。`
@@ -2470,12 +3019,12 @@ function App() {
       "_" +
       Date.now();
 
-    const targetMembers =
-      newProductTargetMemberIds.length > 0
-        ? getTargetMembers(newProductTargetGroup, newProductTargetMemberIds)
-        : getTargetMembers(newProductTargetGroup, []).filter(
-            (member) => !isMemberAfterGraduation(member, newProductReleaseDate)
-          );
+    const selectedTargetMemberIds = getEditableSelectedTargetMemberIds(
+      newProductTargetGroup,
+      newProductTargetMemberIds,
+      newProductReleaseDate
+    );
+    const targetMembers = getTargetMembers(newProductTargetGroup, selectedTargetMemberIds);
 
     if (targetMembers.length === 0) {
       alert("対象メンバーが選択されていません。全選択、またはメンバーを選んでね。");
@@ -2547,6 +3096,7 @@ function App() {
     setNewProductTargetMemberIds([]);
     setNewProductCardCountOverrides({});
     setPendingProductLineupImage("");
+    setShowPendingProductLineupImage(false);
     setPendingProductMemberImages([]);
     setSelectedImportImageIndexes([]);
     setNewProductImportImageLayout("auto");
@@ -2565,6 +3115,7 @@ function App() {
     const firstGroup = targetMembers[0]?.group ?? "equal_love";
     setEditingProductTargetGroup(targetGroups.length > 1 ? "all_groups" : firstGroup);
     setEditingProductTargetMemberIds(product.targetMemberIds ?? targetMembers.map((member) => member.id));
+    setEditingProductCardCountOverrides(product.cardCountOverrides ?? {});
   };
 
   const saveProductEdit = () => {
@@ -2588,7 +3139,9 @@ function App() {
               hasSecret: editingProductHasSecret,
               cardCountOverrides: editingProductCardCountOverrides,
               targetMemberIds:
-                editingProductTargetMemberIds.length > 0
+                editingProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
+                  ? []
+                  : editingProductTargetMemberIds.length > 0
                   ? editingProductTargetMemberIds
                   : getTargetMembers(editingProductTargetGroup, []).map(
                       (member) => member.id
@@ -2766,7 +3319,9 @@ function App() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
+        paddingTop: "env(safe-area-inset-top)",
+        boxSizing: "border-box",
         background: `linear-gradient(180deg, ${selectedGroupTheme.pale} 0%, #ffffff 45%, #fafafa 100%)`,
         fontFamily:
           "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -2777,7 +3332,7 @@ function App() {
         style={{
           display: "grid",
           gridTemplateColumns: isCompactLayout ? "1fr" : "220px minmax(0, 1fr)",
-          minHeight: "100vh",
+          minHeight: "100dvh",
         }}
       >
         <aside
@@ -2788,7 +3343,7 @@ function App() {
             height: "100vh",
             padding: "24px 16px",
             background: "rgba(255,255,255,0.88)",
-            borderRight: "1px solid #f3d9e8",
+            borderRight: `1px solid ${selectedGroupTheme.border}`,
             boxShadow: "8px 0 30px rgba(236, 72, 153, 0.06)",
             boxSizing: "border-box",
           }}
@@ -2818,25 +3373,25 @@ function App() {
           <div style={{ display: "grid", gap: "10px" }}>
             <button
               onClick={() => setActiveTab("collection")}
-              style={activeTab === "collection" ? sidebarActiveButtonStyle : sidebarButtonStyle}
+              style={activeTab === "collection" ? themedSidebarActiveButtonStyle : sidebarButtonStyle}
             >
               🏠 コレクション
             </button>
             <button
               onClick={() => setActiveTab("products")}
-              style={activeTab === "products" ? sidebarActiveButtonStyle : sidebarButtonStyle}
+              style={activeTab === "products" ? themedSidebarActiveButtonStyle : sidebarButtonStyle}
             >
               🔳 商品管理
             </button>
             <button
               onClick={() => setActiveTab("members")}
-              style={activeTab === "members" ? sidebarActiveButtonStyle : sidebarButtonStyle}
+              style={activeTab === "members" ? themedSidebarActiveButtonStyle : sidebarButtonStyle}
             >
               👥 メンバー管理
             </button>
             <button
               onClick={() => setActiveTab("data")}
-              style={activeTab === "data" ? sidebarActiveButtonStyle : sidebarButtonStyle}
+              style={activeTab === "data" ? themedSidebarActiveButtonStyle : sidebarButtonStyle}
             >
               💾 データ管理
             </button>
@@ -2863,6 +3418,7 @@ function App() {
           style={{
             minWidth: 0,
             padding: isCompactLayout ? "14px" : "24px",
+            paddingTop: isCompactLayout ? "calc(52px + env(safe-area-inset-top))" : "48px",
             paddingBottom: isCompactLayout ? "calc(92px + env(safe-area-inset-bottom))" : "calc(24px + env(safe-area-inset-bottom))",
             boxSizing: "border-box",
           }}
@@ -2876,10 +3432,10 @@ function App() {
               marginBottom: isCompactLayout ? "12px" : "18px",
               flexWrap: "wrap",
               position: isCompactLayout ? "sticky" : "static",
-              top: 0,
-              zIndex: 8,
+              top: isCompactLayout ? "calc(8px + env(safe-area-inset-top))" : 0,
+              zIndex: 20,
               padding: isCompactLayout ? "10px 0" : 0,
-              background: isCompactLayout ? "rgba(255,247,251,0.94)" : "transparent",
+              background: isCompactLayout ? selectedGroupTheme.pale : "transparent",
               backdropFilter: isCompactLayout ? "blur(12px)" : "none",
             }}
           >
@@ -2926,7 +3482,7 @@ function App() {
           marginBottom: "20px",
           position: "sticky",
           top: 0,
-          background: "rgba(255,247,251,0.92)",
+          background: selectedGroupTheme.pale,
           backdropFilter: "blur(12px)",
           padding: "10px 0",
           zIndex: 5,
@@ -2934,25 +3490,25 @@ function App() {
       >
         <button
           onClick={() => setActiveTab("collection")}
-          style={activeTab === "collection" ? activeTabButtonStyle : tabButtonStyle}
+          style={activeTab === "collection" ? themedActiveTabButtonStyle : tabButtonStyle}
         >
           コレクション
         </button>
         <button
           onClick={() => setActiveTab("products")}
-          style={activeTab === "products" ? activeTabButtonStyle : tabButtonStyle}
+          style={activeTab === "products" ? themedActiveTabButtonStyle : tabButtonStyle}
         >
           商品管理
         </button>
         <button
           onClick={() => setActiveTab("members")}
-          style={activeTab === "members" ? activeTabButtonStyle : tabButtonStyle}
+          style={activeTab === "members" ? themedActiveTabButtonStyle : tabButtonStyle}
         >
           メンバー管理
         </button>
         <button
           onClick={() => setActiveTab("data")}
-          style={activeTab === "data" ? activeTabButtonStyle : tabButtonStyle}
+          style={activeTab === "data" ? themedActiveTabButtonStyle : tabButtonStyle}
         >
           データ管理
         </button>
@@ -2978,7 +3534,7 @@ function App() {
         </div>
 
         <div style={{ display: "grid", gap: "12px", maxWidth: "620px" }}>
-          <button onClick={exportBackup} style={primaryButtonStyle}>
+          <button onClick={exportBackup} style={themedPrimaryButtonStyle}>
             バックアップを書き出す
           </button>
 
@@ -3101,12 +3657,15 @@ function App() {
           <label>
             通常カード数（コレクションに出す種類数）：
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={newProductNormalCardCount}
-              onChange={(event) =>
-                setNewProductNormalCardCount(Number(event.target.value))
-              }
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const value = event.target.value.replace(/\D/g, "");
+                setNewProductNormalCardCount(value === "" ? 1 : Math.max(1, Number(value)));
+              }}
               style={{
                 marginLeft: "8px",
                 padding: "8px",
@@ -3167,26 +3726,41 @@ function App() {
 
             {pendingProductLineupImage && (
               <>
-                <img
-                  src={pendingProductLineupImage}
-                  alt="取り込み予定ラインナップ画像"
-                  style={{
-                    width: "100%",
-                    maxHeight: "360px",
-                    objectFit: "contain",
-                    borderRadius: "12px",
-                    background: "white",
-                    border: "1px solid #eee",
-                    marginTop: "12px",
-                  }}
-                />
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "10px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowPendingProductLineupImage((prev) => !prev)}
+                    style={secondaryActionButtonStyle}
+                  >
+                    {showPendingProductLineupImage ? "ラインナップ画像を非表示" : "ラインナップ画像を表示"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingProductLineupImage("");
+                      setShowPendingProductLineupImage(false);
+                    }}
+                    style={dangerButtonStyle}
+                  >
+                    取り込み予定画像を削除
+                  </button>
+                </div>
 
-                <button
-                  onClick={() => setPendingProductLineupImage("")}
-                  style={{ ...dangerButtonStyle, marginTop: "8px" }}
-                >
-                  取り込み予定画像を削除
-                </button>
+                {showPendingProductLineupImage && (
+                  <img
+                    src={pendingProductLineupImage}
+                    alt="取り込み予定ラインナップ画像"
+                    style={{
+                      width: "100%",
+                      maxHeight: "360px",
+                      objectFit: "contain",
+                      borderRadius: "12px",
+                      background: "white",
+                      border: "1px solid #eee",
+                      marginTop: "12px",
+                    }}
+                  />
+                )}
               </>
             )}
           </div>
@@ -3220,11 +3794,7 @@ function App() {
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
               <button
                 type="button"
-                onClick={() => setNewProductTargetMemberIds(
-                  getTargetMembers(newProductTargetGroup, [])
-                    .filter((member) => !isMemberAfterGraduation(member, newProductReleaseDate))
-                    .map((member) => member.id)
-                )}
+                onClick={() => setNewProductTargetMemberIds(getDefaultSelectedTargetMemberIds(newProductTargetGroup, newProductReleaseDate))}
                 style={secondaryActionButtonStyle}
               >
                 全選択
@@ -3238,87 +3808,136 @@ function App() {
               </button>
             </div>
 
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isCompactLayout ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                gap: "8px",
+                maxHeight: isCompactLayout ? "360px" : "420px",
+                overflowY: "auto",
+                paddingRight: "4px",
+              }}
+            >
               {getTargetMembers(newProductTargetGroup, []).map((member) => {
-                const checked = newProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
-                  ? false
-                  : newProductTargetMemberIds.length === 0
-                  ? !isMemberAfterGraduation(member, newProductReleaseDate)
-                  : newProductTargetMemberIds.includes(member.id);
+                const selectedIds = getEditableSelectedTargetMemberIds(
+                  newProductTargetGroup,
+                  newProductTargetMemberIds,
+                  newProductReleaseDate
+                );
+                const checked = selectedIds.includes(member.id);
+                const theme = getGroupTheme(member.group);
+                const memberCardCount = newProductCardCountOverrides[member.id] ?? newProductNormalCardCount;
 
                 return (
                   <label
                     key={member.id}
                     style={{
-                      padding: "6px 10px",
-                      borderRadius: "999px",
-                      border: checked ? "2px solid #c084fc" : "1px solid #ddd",
-                      background: checked ? "#f3e8ff" : "white",
+                      minHeight: "48px",
+                      padding: "8px 10px",
+                      borderRadius: "16px",
+                      border: checked ? `2px solid ${theme.main}` : "2px solid #e5e7eb",
+                      background: checked ? theme.pale : "white",
+                      color: checked ? theme.text : "#111827",
                       cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      boxSizing: "border-box",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() =>
-                        toggleTargetMember(
-                          member.id,
-                          newProductTargetMemberIds.length === 0 || newProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
-                            ? getTargetMembers(newProductTargetGroup, [])
-                                .filter((item) => !isMemberAfterGraduation(item, newProductReleaseDate))
-                                .map((item) => item.id)
-                            : newProductTargetMemberIds,
-                          setNewProductTargetMemberIds
-                        )
-                      }
-                      style={{ marginRight: "4px" }}
-                    />
-                    {member.name}
+                    <span style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleTargetMember(member.id, selectedIds, setNewProductTargetMemberIds)}
+                        style={{ margin: 0, flex: "0 0 auto" }}
+                      />
+                      <span style={{ fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {member.name}
+                      </span>
+                    </span>
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        opacity: checked ? 1 : 0,
+                        pointerEvents: checked ? "auto" : "none",
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCardCountOverride(
+                            member.id,
+                            memberCardCount - 1,
+                            setNewProductCardCountOverrides
+                          )
+                        }
+                        style={{
+                          ...secondaryButtonStyle,
+                          minWidth: "34px",
+                          minHeight: "34px",
+                          padding: "0",
+                          borderRadius: "10px",
+                        }}
+                      >
+                        -1
+                      </button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={memberCardCount}
+                        disabled={!checked}
+                        onFocus={(event) => event.currentTarget.select()}
+                        onChange={(event) => {
+                          const value = event.target.value.replace(/\D/g, "");
+                          updateCardCountOverride(
+                            member.id,
+                            value === "" ? 0 : Number(value),
+                            setNewProductCardCountOverrides
+                          );
+                        }}
+                        aria-label={`${member.name}の種類数`}
+                        style={{
+                          width: "48px",
+                          minHeight: "34px",
+                          padding: "6px",
+                          borderRadius: "10px",
+                          border: `1px solid ${theme.border}`,
+                          fontSize: "16px",
+                          textAlign: "center",
+                          boxSizing: "border-box",
+                          background: "white",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateCardCountOverride(
+                            member.id,
+                            memberCardCount + 1,
+                            setNewProductCardCountOverrides
+                          )
+                        }
+                        style={{
+                          ...secondaryButtonStyle,
+                          minWidth: "34px",
+                          minHeight: "34px",
+                          padding: "0",
+                          borderRadius: "10px",
+                        }}
+                      >
+                        +1
+                      </button>
+                    </div>
                   </label>
                 );
               })}
-            </div>
-
-            <div style={{ display: "grid", gap: "8px", marginTop: "12px" }}>
-              <div style={{ fontWeight: "bold", color: "#374151" }}>メンバー別の種類数</div>
-              <p style={{ color: "#666", fontSize: "13px", margin: 0 }}>
-                基本は通常カード数と同じ。特定メンバーだけ種類数が違う商品はここで調整する。
-              </p>
-              {getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).map((member) => (
-                <label
-                  key={`${member.id}-card-count`}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "10px",
-                    padding: "8px 10px",
-                    borderRadius: "12px",
-                    background: "white",
-                    border: "1px solid #eee",
-                  }}
-                >
-                  <span style={{ fontWeight: "bold" }}>{member.name}</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={newProductCardCountOverrides[member.id] ?? newProductNormalCardCount}
-                    onChange={(event) =>
-                      setNewProductCardCountOverrides((prev) => ({
-                        ...prev,
-                        [member.id]: Math.max(1, Number(event.target.value) || 1),
-                      }))
-                    }
-                    style={{
-                      width: "72px",
-                      padding: "8px",
-                      borderRadius: "10px",
-                      border: "1px solid #ddd",
-                      fontSize: "16px",
-                    }}
-                  />
-                </label>
-              ))}
             </div>
 
             <p style={{ color: "#666", fontSize: "13px", marginBottom: 0 }}>
@@ -3403,10 +4022,10 @@ function App() {
               >
                 選択中：{selectedImportImageIndexes.length}枚 / 必要画像：
                 {getRequiredImportImageCount(
-                  getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length,
+                  getTargetMembers(newProductTargetGroup, getEditableSelectedTargetMemberIds(newProductTargetGroup, newProductTargetMemberIds, newProductReleaseDate)).length,
                   newProductImportImageLayout
                 )}枚 / 作成予定：{getImportImageGeneratedMemberCount()}人分 / 対象メンバー：
-                {getTargetMembers(newProductTargetGroup, newProductTargetMemberIds).length}人 / 切り出し方式：{
+                {getTargetMembers(newProductTargetGroup, getEditableSelectedTargetMemberIds(newProductTargetGroup, newProductTargetMemberIds, newProductReleaseDate)).length}人 / 切り出し方式：{
                   newProductImportImageLayout === "auto"
                     ? "自動"
                     : newProductImportImageLayout === "fixedFive"
@@ -3496,7 +4115,7 @@ function App() {
             </div>
           )}
 
-          <button onClick={addProduct} style={primaryButtonStyle}>
+          <button onClick={addProduct} style={themedPrimaryButtonStyle}>
             商品を追加
           </button>
         </div>
@@ -3504,8 +4123,36 @@ function App() {
         <div style={{ marginTop: "28px" }}>
           <h3>登録済み商品</h3>
 
+          <div
+            style={{
+              display: "grid",
+              gap: "10px",
+              marginBottom: "14px",
+              padding: "12px",
+              borderRadius: "16px",
+              border: `1px solid ${selectedGroupTheme.border}`,
+              background: selectedGroupTheme.pale,
+            }}
+          >
+            <label style={{ display: "grid", gap: "6px", fontWeight: "bold" }}>
+              商品の並び順
+              <select
+                value={productSortMode}
+                onChange={(event) => setProductSortMode(event.target.value as ProductSortMode)}
+                style={inputStyle}
+              >
+                <option value="releaseAsc">発売日↑</option>
+                <option value="releaseDesc">発売日↓</option>
+                <option value="manual">任意順</option>
+              </select>
+            </label>
+            <div style={{ color: selectedGroupTheme.text, fontSize: "13px", fontWeight: "bold" }}>
+              任意順では、商品カードの「↑」「↓」で順番を入れ替えられる。
+            </div>
+          </div>
+
           <div style={{ display: "grid", gap: "12px" }}>
-            {products.map((product) => {
+            {managedProducts.map((product) => {
               const lineupImage = productLineupImages[product.id];
 
               return (
@@ -3551,6 +4198,22 @@ function App() {
                         style={secondaryActionButtonStyle}
                       >
                         編集
+                      </button>
+
+                      <button
+                        onClick={() => moveProduct(product.id, -1)}
+                        style={secondaryActionButtonStyle}
+                        title="上へ移動"
+                      >
+                        ↑
+                      </button>
+
+                      <button
+                        onClick={() => moveProduct(product.id, 1)}
+                        style={secondaryActionButtonStyle}
+                        title="下へ移動"
+                      >
+                        ↓
                       </button>
 
                       <button
@@ -3640,9 +4303,10 @@ function App() {
                 borderRadius: "999px",
                 border:
                   groupFilter === group
-                    ? "2px solid #c084fc"
+                    ? `2px solid ${group === "all" ? selectedGroupTheme.main : getGroupTheme(group as GroupId).main}`
                     : "1px solid #ddd",
-                background: groupFilter === group ? "#f3e8ff" : "white",
+                background: groupFilter === group ? (group === "all" ? selectedGroupTheme.pale : getGroupTheme(group as GroupId).pale) : "white",
+                color: groupFilter === group ? (group === "all" ? selectedGroupTheme.text : getGroupTheme(group as GroupId).text) : "#111827",
                 cursor: "pointer",
               }}
             >
@@ -3656,11 +4320,7 @@ function App() {
           onChange={(event) => setSelectedMemberId(event.target.value)}
           style={{ ...inputStyle, maxWidth: "360px" }}
         >
-          {filteredMembers.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.name}
-            </option>
-          ))}
+          {renderMemberSelectOptions()}
         </select>
 
         <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -3686,19 +4346,25 @@ function App() {
         <h2>メンバー追加</h2>
 
         <div style={{ display: "grid", gap: "12px", maxWidth: "420px" }}>
-          <input
-            value={newMemberName}
-            onChange={(event) => setNewMemberName(event.target.value)}
-            placeholder="名前 例：谷崎早耶"
-            style={inputStyle}
-          />
+          {renderMemberFormField(
+            "名前",
+            <input
+              value={newMemberName}
+              onChange={(event) => setNewMemberName(event.target.value)}
+              placeholder="例：谷崎早耶"
+              style={inputStyle}
+            />
+          )}
 
-          <input
-            value={newMemberKana}
-            onChange={(event) => setNewMemberKana(event.target.value)}
-            placeholder="よみ 例：たにざきさや"
-            style={inputStyle}
-          />
+          {renderMemberFormField(
+            "よみ",
+            <input
+              value={newMemberKana}
+              onChange={(event) => setNewMemberKana(event.target.value)}
+              placeholder="例：たにざきさや"
+              style={inputStyle}
+            />
+          )}
 
           <label style={{ display: "grid", gap: "6px", fontWeight: "bold", color: "#374151" }}>
             卒業日
@@ -3711,19 +4377,327 @@ function App() {
             />
           </label>
 
-          <select
-            value={newMemberGroup}
-            onChange={(event) => setNewMemberGroup(event.target.value as GroupId)}
-            style={inputStyle}
-          >
-            <option value="equal_love">=LOVE</option>
-            <option value="not_equal_me">≠ME</option>
-            <option value="nearly_equal_joy">≒JOY</option>
-          </select>
+          {renderMemberFormField(
+            "所属グループ",
+            <select
+              value={newMemberGroup}
+              onChange={(event) => setNewMemberGroup(event.target.value as GroupId)}
+              style={inputStyle}
+            >
+              <option value="equal_love">=LOVE</option>
+              <option value="not_equal_me">≠ME</option>
+              <option value="nearly_equal_joy">≒JOY</option>
+            </select>
+          )}
 
-          <button onClick={addMember} style={primaryButtonStyle}>
+          <button onClick={addMember} style={themedPrimaryButtonStyle}>
             メンバーを追加
           </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: "28px",
+            padding: "16px",
+            borderRadius: "18px",
+            border: "1px solid #e5e7eb",
+            background: "#fbfdff",
+            display: "grid",
+            gap: "12px",
+          }}
+        >
+          <div>
+            <h3 style={{ margin: "0 0 4px" }}>公式プロフィール画像取込</h3>
+            <div style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.6 }}>
+              公式プロフィールページの並び順を、選択グループのあいうえお順の現役メンバーに対応させて反映します。卒業メンバーは上書きしません。取得済み画像は重複を避けて保存します。
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isCompactLayout ? "1fr" : "160px minmax(0, 1fr)",
+              gap: "10px",
+            }}
+          >
+            <select
+              value={profileImportGroup}
+              onChange={(event) => {
+                const nextGroup = event.target.value as GroupId;
+                setProfileImportGroup(nextGroup);
+                setProfileImportUrl(defaultProfileUrls[nextGroup]);
+                setImportedProfileImages([]);
+                setProfileImageMemberSelections({});
+                setSavedProfileImageMemberSelections({});
+              }}
+              style={inputStyle}
+            >
+              <option value="equal_love">=LOVE</option>
+              <option value="not_equal_me">≠ME</option>
+              <option value="nearly_equal_joy">≒JOY</option>
+            </select>
+
+            <input
+              value={profileImportUrl}
+              onChange={(event) => setProfileImportUrl(event.target.value)}
+              placeholder="公式プロフィールURL"
+              style={inputStyle}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={importProfileImagesFromUrl}
+              disabled={isImportingProfileImages}
+              style={themedPrimaryButtonStyle}
+            >
+              {isImportingProfileImages ? "取得中..." : "プロフィール画像を取得"}
+            </button>
+
+            <button
+              type="button"
+              onClick={applyProfileImagesToGroup}
+              disabled={importedProfileImages.length === 0}
+              style={secondaryActionButtonStyle}
+            >
+              一括反映
+            </button>
+          </div>
+
+          {importedProfileImages.length > 0 && (
+            <div style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.6 }}>
+              取得画像：{importedProfileImages.length}枚 / 反映対象：{getProfileImportTargetMembers(profileImportGroup).length}人
+              {importedProfileImages.length < getProfileImportTargetMembers(profileImportGroup).length
+                ? "（画像が足りないメンバーは反映されません）"
+                : importedProfileImages.length > getProfileImportTargetMembers(profileImportGroup).length
+                ? "（対象人数を超えた画像は一括反映では使用しません）"
+                : ""}
+            </div>
+          )}
+
+          {savedProfileImages.length > 0 && (
+            <div
+              style={{
+                padding: "12px",
+                borderRadius: "16px",
+                background: "#fff7ed",
+                border: "1px solid #fed7aa",
+                display: "grid",
+                gap: "10px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "grid", gap: "4px" }}>
+                  <strong>保存済みプロフィール切り出し画像：{savedProfileImages.length}枚</strong>
+                  <span style={{ color: "#6b7280", fontSize: "13px", lineHeight: 1.6 }}>
+                    取得済み画像を保存しています。同じ画像は重複保存しません。オレンジ枠の画像は保存済み切り出し画像です。商品カード編集には表示せず、メンバーアイコンへの個別反映だけに使います。
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSavedProfileImages((prev) => !prev)}
+                  style={secondaryActionButtonStyle}
+                >
+                  {showSavedProfileImages ? "保存済み画像を非表示" : "保存済み画像を表示"}
+                </button>
+              </div>
+
+              {showSavedProfileImages && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isCompactLayout
+                      ? "repeat(2, minmax(0, 1fr))"
+                      : "repeat(auto-fill, minmax(150px, 1fr))",
+                    gap: "10px",
+                    maxHeight: isCompactLayout ? "360px" : "460px",
+                    overflowY: "auto",
+                    paddingRight: "4px",
+                  }}
+                >
+                  {savedProfileImages.map((savedImage, index) => {
+                    const image = savedImage?.image ?? "";
+                    const selectedMemberIdForImage = savedProfileImageMemberSelections[index] ?? "";
+                    const selectedMemberForImage = members.find((member) => member.id === selectedMemberIdForImage);
+                    const targetMembers = getProfileImportTargetMembers(profileImportGroup);
+
+                    return (
+                      <div
+                        key={`${savedImage.imageUrl ?? "saved-profile"}-${index}`}
+                        style={{
+                          border: "2px solid #fb923c",
+                          borderRadius: "16px",
+                          background: "#fffbeb",
+                          padding: "10px",
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            aspectRatio: "1 / 1",
+                            borderRadius: "14px",
+                            background: "#fff7ed",
+                            border: "1px dashed #fb923c",
+                            overflow: "hidden",
+                            display: "grid",
+                            placeItems: "center",
+                            color: "#9a3412",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {image ? (
+                            <img
+                              src={image}
+                              alt={selectedMemberForImage?.name ?? savedImage.name ?? `保存済みプロフィール画像${index + 1}`}
+                              style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center top", display: "block" }}
+                            />
+                          ) : (
+                            "画像なし"
+                          )}
+                        </div>
+                        <div style={{ fontWeight: "bold", fontSize: "14px" }}>
+                          保存画像 {index + 1}
+                        </div>
+                        {savedImage.name && (
+                          <div style={{ color: "#64748b", fontSize: "12px" }}>
+                            取得名：{savedImage.name}
+                          </div>
+                        )}
+                        <select
+                          value={selectedMemberIdForImage}
+                          onChange={(event) =>
+                            setSavedProfileImageMemberSelections((prev) => ({
+                              ...prev,
+                              [index]: event.target.value,
+                            }))
+                          }
+                          style={{ ...inputStyle, padding: "10px", fontSize: "13px" }}
+                        >
+                          <option value="">反映先を選択</option>
+                          {targetMembers.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => applySavedProfileImageIndexToSelectedMember(index)}
+                          disabled={!image || !selectedMemberIdForImage}
+                          style={secondaryActionButtonStyle}
+                        >
+                          この画像を反映
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {importedProfileImages.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isCompactLayout
+                  ? "repeat(2, minmax(0, 1fr))"
+                  : "repeat(auto-fill, minmax(150px, 1fr))",
+                gap: "10px",
+                maxHeight: isCompactLayout ? "420px" : "520px",
+                overflowY: "auto",
+                paddingRight: "4px",
+              }}
+            >
+              {importedProfileImages.map((importedImage, index) => {
+                const image = importedImage?.image ?? "";
+                const selectedMemberIdForImage = profileImageMemberSelections[index] ?? "";
+                const selectedMemberForImage = members.find((member) => member.id === selectedMemberIdForImage);
+                const theme = getGroupTheme(selectedMemberForImage?.group ?? profileImportGroup);
+                const targetMembers = getProfileImportTargetMembers(profileImportGroup);
+
+                return (
+                  <div
+                    key={`${importedImage.imageUrl ?? "profile"}-${index}`}
+                    style={{
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: "16px",
+                      background: "white",
+                      padding: "10px",
+                      display: "grid",
+                      gap: "8px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        aspectRatio: "1 / 1",
+                        borderRadius: "14px",
+                        background: theme.pale,
+                        overflow: "hidden",
+                        display: "grid",
+                        placeItems: "center",
+                        color: theme.text,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {image ? (
+                        <img
+                          src={image}
+                          alt={selectedMemberForImage?.name ?? importedImage.name ?? `プロフィール画像${index + 1}`}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                      ) : (
+                        "画像なし"
+                      )}
+                    </div>
+                    <div style={{ fontWeight: "bold", fontSize: "14px" }}>
+                      {index + 1}. {selectedMemberForImage?.name ?? "反映先未選択"}
+                    </div>
+                    {importedImage.name && importedImage.name !== selectedMemberForImage?.name && (
+                      <div style={{ color: "#64748b", fontSize: "12px" }}>
+                        取得名：{importedImage.name}
+                      </div>
+                    )}
+                    <select
+                      value={selectedMemberIdForImage}
+                      onChange={(event) =>
+                        setProfileImageMemberSelections((prev) => ({
+                          ...prev,
+                          [index]: event.target.value,
+                        }))
+                      }
+                      style={{ ...inputStyle, padding: "10px", fontSize: "13px" }}
+                    >
+                      <option value="">反映先を選択</option>
+                      {targetMembers.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => applyProfileImageIndexToSelectedMember(index)}
+                      disabled={!image || !selectedMemberIdForImage}
+                      style={secondaryActionButtonStyle}
+                    >
+                      個別反映
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: "28px" }}>
@@ -3779,13 +4753,18 @@ function App() {
                           style={{
                             padding: "14px",
                             borderRadius: "18px",
-                            border: "1px solid #f1e4ec",
-                            background: "white",
+                            border: (member as AppMember).graduationDate
+                              ? "1px solid #e5e7eb"
+                              : "1px solid #f1e4ec",
+                            background: (member as AppMember).graduationDate ? "#f9fafb" : "white",
                             display: "flex",
                             justifyContent: "space-between",
                             gap: "14px",
                             alignItems: "center",
-                            boxShadow: "0 10px 28px rgba(236, 72, 153, 0.06)",
+                            boxShadow: (member as AppMember).graduationDate
+                              ? "none"
+                              : "0 10px 28px rgba(236, 72, 153, 0.06)",
+                            opacity: (member as AppMember).graduationDate ? 0.68 : 1,
                           }}
                         >
                           <div
@@ -3805,6 +4784,24 @@ function App() {
                               <div style={{ color: "#9ca3af", fontSize: "12px", marginTop: "4px" }}>
                                 {groupLabels[member.group]}
                               </div>
+                              {(member as AppMember).graduationDate && (
+                                <div
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    width: "fit-content",
+                                    marginTop: "6px",
+                                    padding: "3px 8px",
+                                    borderRadius: "999px",
+                                    background: "#e5e7eb",
+                                    color: "#6b7280",
+                                    fontSize: "12px",
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  卒業 {((member as AppMember).graduationDate ?? "").replace(/-/g, "/")}
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -3923,11 +4920,108 @@ function App() {
             style={{
               width: `${memberStats.percentage}%`,
               height: "100%",
-              background: "#c084fc",
+              background: selectedGroupTheme.main,
               borderRadius: "999px",
               transition: "0.2s",
             }}
           />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: "10px",
+            marginBottom: "18px",
+            padding: isCompactLayout ? "12px" : "14px",
+            borderRadius: "18px",
+            border: `1px solid ${selectedGroupTheme.border}`,
+            background: selectedGroupTheme.pale,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "10px",
+              alignItems: "end",
+            }}
+          >
+            <label style={{ display: "grid", gap: "6px", fontWeight: "bold", minWidth: 0 }}>
+              商品フィルタ
+              <select
+                value={collectionProductFilter}
+                onChange={(event) => setCollectionProductFilter(event.target.value)}
+                style={inputStyle}
+              >
+                <option value="all">すべて</option>
+                {collectionProductOptions.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: "6px", fontWeight: "bold", minWidth: 0 }}>
+              発売年フィルタ
+              <select
+                value={collectionReleaseYearFilter}
+                onChange={(event) => setCollectionReleaseYearFilter(event.target.value)}
+                style={inputStyle}
+              >
+                <option value="all">すべて</option>
+                {collectionReleaseYearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}年
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: "6px", fontWeight: "bold", minWidth: 0 }}>
+              所持状態
+              <select
+                value={collectionOwnedFilter}
+                onChange={(event) => setCollectionOwnedFilter(event.target.value as CollectionOwnedFilter)}
+                style={inputStyle}
+              >
+                <option value="all">すべて</option>
+                <option value="owned">所持あり</option>
+                <option value="missing">未所持のみ</option>
+                <option value="incomplete">未コンプ</option>
+                <option value="complete">コンプ済み</option>
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: "6px", fontWeight: "bold", minWidth: 0 }}>
+              並び順
+              <select
+                value={productSortMode}
+                onChange={(event) => setProductSortMode(event.target.value as ProductSortMode)}
+                style={inputStyle}
+              >
+                <option value="releaseAsc">発売日↑</option>
+                <option value="releaseDesc">発売日↓</option>
+                <option value="manual">任意順</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
+            <span style={{ color: selectedGroupTheme.text, fontWeight: "bold", fontSize: "13px" }}>
+              表示中の商品：{visibleProducts.length}件
+            </span>
+            <button
+              onClick={() => {
+                setCollectionProductFilter("all");
+                setCollectionReleaseYearFilter("all");
+                setCollectionOwnedFilter("all");
+              }}
+              style={secondaryActionButtonStyle}
+            >
+              フィルタ解除
+            </button>
+          </div>
         </div>
 
         {visibleProducts.map((product) => {
@@ -4324,7 +5418,7 @@ function App() {
             alignItems: "center",
             justifyContent: "center",
             padding: "24px",
-            zIndex: 20,
+            zIndex: 60,
           }}
         >
           <div
@@ -4333,6 +5427,7 @@ function App() {
               background: "white",
               borderRadius: "16px",
               padding: "24px",
+              paddingBottom: isCompactLayout ? "calc(112px + env(safe-area-inset-bottom))" : "24px",
               width: "100%",
               maxWidth: "920px",
               maxHeight: "86vh",
@@ -4398,7 +5493,7 @@ function App() {
                 等分割で再生成
               </button>
 
-              <button onClick={saveCroppedImagesToProduct} style={primaryButtonStyle}>
+              <button onClick={saveCroppedImagesToProduct} style={themedPrimaryButtonStyle}>
                 切り出し画像として保存
               </button>
 
@@ -4470,7 +5565,7 @@ function App() {
             alignItems: "center",
             justifyContent: "center",
             padding: "24px",
-            zIndex: 10,
+            zIndex: 60,
           }}
         >
           <div
@@ -4479,27 +5574,36 @@ function App() {
               background: "white",
               borderRadius: "16px",
               padding: "24px",
+              paddingBottom: isCompactLayout ? "calc(112px + env(safe-area-inset-bottom))" : "24px",
               width: "100%",
-              maxWidth: "420px",
+              maxWidth: "520px",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
             }}
           >
             <h2>メンバー編集</h2>
 
             <div style={{ display: "grid", gap: "12px" }}>
-              <input
-                value={editingMemberName}
-                onChange={(event) => setEditingMemberName(event.target.value)}
-                placeholder="名前"
-                style={inputStyle}
-              />
+              {renderMemberFormField(
+                "名前",
+                <input
+                  value={editingMemberName}
+                  onChange={(event) => setEditingMemberName(event.target.value)}
+                  placeholder="名前"
+                  style={inputStyle}
+                />
+              )}
 
-              <input
-                value={editingMemberKana}
-                onChange={(event) => setEditingMemberKana(event.target.value)}
-                placeholder="よみ"
-                style={inputStyle}
-              />
+              {renderMemberFormField(
+                "よみ",
+                <input
+                  value={editingMemberKana}
+                  onChange={(event) => setEditingMemberKana(event.target.value)}
+                  placeholder="よみ"
+                  style={inputStyle}
+                />
+              )}
 
               <label style={{ display: "grid", gap: "6px", fontWeight: "bold", color: "#374151" }}>
                 卒業日
@@ -4512,17 +5616,20 @@ function App() {
                 />
               </label>
 
-              <select
-                value={editingMemberGroup}
-                onChange={(event) =>
-                  setEditingMemberGroup(event.target.value as GroupId)
-                }
-                style={inputStyle}
-              >
-                <option value="equal_love">=LOVE</option>
-                <option value="not_equal_me">≠ME</option>
-                <option value="nearly_equal_joy">≒JOY</option>
-              </select>
+              {renderMemberFormField(
+                "所属グループ",
+                <select
+                  value={editingMemberGroup}
+                  onChange={(event) =>
+                    setEditingMemberGroup(event.target.value as GroupId)
+                  }
+                  style={inputStyle}
+                >
+                  <option value="equal_love">=LOVE</option>
+                  <option value="not_equal_me">≠ME</option>
+                  <option value="nearly_equal_joy">≒JOY</option>
+                </select>
+              )}
 
               {editingMemberId && (
                 <div
@@ -4601,7 +5708,7 @@ function App() {
                   キャンセル
                 </button>
 
-                <button onClick={saveMemberEdit} style={{ ...primaryButtonStyle, flex: 1 }}>
+                <button onClick={saveMemberEdit} style={{ ...themedPrimaryButtonStyle, flex: 1 }}>
                   保存
                 </button>
               </div>
@@ -4621,7 +5728,7 @@ function App() {
             alignItems: "center",
             justifyContent: "center",
             padding: "24px",
-            zIndex: 10,
+            zIndex: 60,
           }}
         >
           <div
@@ -4630,8 +5737,11 @@ function App() {
               background: "white",
               borderRadius: "16px",
               padding: "24px",
+              paddingBottom: isCompactLayout ? "calc(112px + env(safe-area-inset-bottom))" : "24px",
               width: "100%",
-              maxWidth: "420px",
+              maxWidth: "520px",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
             }}
           >
@@ -4655,12 +5765,15 @@ function App() {
               <label>
                 通常カード数：
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={editingProductNormalCardCount}
-                  onChange={(event) =>
-                    setEditingProductNormalCardCount(Number(event.target.value))
-                  }
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => {
+                    const value = event.target.value.replace(/\D/g, "");
+                    setEditingProductNormalCardCount(value === "" ? 1 : Math.max(1, Number(value)));
+                  }}
                   style={{
                     marginLeft: "8px",
                     padding: "8px",
@@ -4703,6 +5816,7 @@ function App() {
                   }}
                   style={{ ...inputStyle, marginBottom: "8px" }}
                 >
+                  <option value="all_groups">全グループ</option>
                   <option value="equal_love">=LOVE</option>
                   <option value="not_equal_me">≠ME</option>
                   <option value="nearly_equal_joy">≒JOY</option>
@@ -4711,9 +5825,7 @@ function App() {
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                   <button
                     type="button"
-                    onClick={() => setEditingProductTargetMemberIds(
-                      getTargetMembers(editingProductTargetGroup, []).map((member) => member.id)
-                    )}
+                    onClick={() => setEditingProductTargetMemberIds(getTargetMembers(editingProductTargetGroup, []).map((member) => member.id))}
                     style={secondaryActionButtonStyle}
                   >
                     全選択
@@ -4727,44 +5839,152 @@ function App() {
                   </button>
                 </div>
 
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {getTargetMembers(editingProductTargetGroup, []).map((member) => {
-                    const checked = editingProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
-                      ? false
-                      : editingProductTargetMemberIds.length === 0 ||
-                        editingProductTargetMemberIds.includes(member.id);
+                {activeTab === "collection" && (
+                  <div
+                    style={{
+                      marginBottom: "8px",
+                      padding: "8px 10px",
+                      borderRadius: "12px",
+                      background: selectedGroupTheme.pale,
+                      color: selectedGroupTheme.text,
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    コレクション画面からの編集なので、選択中メンバーのみ表示しています。
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isCompactLayout ? "1fr" : "repeat(2, minmax(0, 1fr))",
+                    gap: "8px",
+                    maxHeight: isCompactLayout ? "360px" : "420px",
+                    overflowY: "auto",
+                    paddingRight: "4px",
+                  }}
+                >
+                  {(activeTab === "collection"
+                    ? getTargetMembers(editingProductTargetGroup, []).filter((member) => member.id === selectedMember.id)
+                    : getTargetMembers(editingProductTargetGroup, [])
+                  ).map((member) => {
+                    const selectedIds = editingProductTargetMemberIds.includes(NO_TARGET_MEMBER_SELECTION)
+                      ? []
+                      : editingProductTargetMemberIds.length === 0
+                      ? getTargetMembers(editingProductTargetGroup, []).map((item) => item.id)
+                      : editingProductTargetMemberIds;
+                    const checked = selectedIds.includes(member.id);
+                    const theme = getGroupTheme(member.group);
+                    const memberCardCount = editingProductCardCountOverrides[member.id] ?? editingProductNormalCardCount;
 
                     return (
                       <label
                         key={member.id}
                         style={{
-                          padding: "6px 10px",
-                          borderRadius: "999px",
-                          border: checked
-                            ? "2px solid #c084fc"
-                            : "1px solid #ddd",
-                          background: checked ? "#f3e8ff" : "white",
+                          minHeight: "48px",
+                          padding: "8px 10px",
+                          borderRadius: "16px",
+                          border: checked ? `2px solid ${theme.main}` : "2px solid #e5e7eb",
+                          background: checked ? theme.pale : "white",
+                          color: checked ? theme.text : "#111827",
                           cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "8px",
+                          boxSizing: "border-box",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() =>
-                            toggleTargetMember(
-                              member.id,
-                              editingProductTargetMemberIds.length === 0
-                                ? getTargetMembers(
-                                    editingProductTargetGroup,
-                                    []
-                                  ).map((item) => item.id)
-                                : editingProductTargetMemberIds,
-                              setEditingProductTargetMemberIds
-                            )
-                          }
-                          style={{ marginRight: "4px" }}
-                        />
-                        {member.name}
+                        <span style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleTargetMember(member.id, selectedIds, setEditingProductTargetMemberIds)}
+                            style={{ margin: 0, flex: "0 0 auto" }}
+                          />
+                          <span style={{ fontWeight: "bold", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {member.name}
+                          </span>
+                        </span>
+                        <div
+                          onClick={(event) => event.stopPropagation()}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            opacity: checked ? 1 : 0,
+                            pointerEvents: checked ? "auto" : "none",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateCardCountOverride(
+                                member.id,
+                                memberCardCount - 1,
+                                setEditingProductCardCountOverrides
+                              )
+                            }
+                            style={{
+                              ...secondaryButtonStyle,
+                              minWidth: "34px",
+                              minHeight: "34px",
+                              padding: "0",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            -1
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={memberCardCount}
+                            disabled={!checked}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onChange={(event) => {
+                              const value = event.target.value.replace(/\D/g, "");
+                              updateCardCountOverride(
+                                member.id,
+                                value === "" ? 0 : Number(value),
+                                setEditingProductCardCountOverrides
+                              );
+                            }}
+                            aria-label={`${member.name}の種類数`}
+                            style={{
+                              width: "48px",
+                              minHeight: "34px",
+                              padding: "6px",
+                              borderRadius: "10px",
+                              border: `1px solid ${theme.border}`,
+                              fontSize: "16px",
+                              textAlign: "center",
+                              boxSizing: "border-box",
+                              background: "white",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateCardCountOverride(
+                                member.id,
+                                memberCardCount + 1,
+                                setEditingProductCardCountOverrides
+                              )
+                            }
+                            style={{
+                              ...secondaryButtonStyle,
+                              minWidth: "34px",
+                              minHeight: "34px",
+                              padding: "0",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            +1
+                          </button>
+                        </div>
                       </label>
                     );
                   })}
@@ -4779,7 +5999,7 @@ function App() {
                   キャンセル
                 </button>
 
-                <button onClick={saveProductEdit} style={{ ...primaryButtonStyle, flex: 1 }}>
+                <button onClick={saveProductEdit} style={{ ...themedPrimaryButtonStyle, flex: 1 }}>
                   保存
                 </button>
               </div>
@@ -4790,7 +6010,10 @@ function App() {
 
       {editingCardId && (
         <div
-          onClick={() => setEditingCardId(null)}
+          onClick={() => {
+            setEditingCardId(null);
+            setEditingCardMode("menu");
+          }}
           style={{
             position: "fixed",
             inset: 0,
@@ -4798,150 +6021,255 @@ function App() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "24px",
+            padding: "16px",
+            zIndex: 60,
           }}
         >
           <div
             onClick={(event) => event.stopPropagation()}
             style={{
               background: "white",
-              borderRadius: "16px",
-              padding: "24px",
+              borderRadius: "18px",
+              padding: "20px",
+              paddingBottom: isCompactLayout ? "calc(112px + env(safe-area-inset-bottom))" : "20px",
               width: "100%",
-              maxWidth: "360px",
+              maxWidth: "380px",
+              maxHeight: "calc(100dvh - 32px)",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
             }}
           >
-            <h2>所持枚数</h2>
+            {editingCardMode === "menu" && (
+              <div style={{ display: "grid", gap: "12px" }}>
+                <h2 style={{ margin: 0 }}>カード編集</h2>
+                <p style={{ margin: 0, color: "#64748b", lineHeight: 1.7 }}>
+                  編集したい内容を選んでね。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setEditingCardMode("count")}
+                  style={{ ...themedPrimaryButtonStyle, width: "100%", minHeight: "48px" }}
+                >
+                  所持枚数を編集
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingCardMode("image")}
+                  style={{ ...secondaryButtonStyle, width: "100%", minHeight: "48px" }}
+                >
+                  画像を編集
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCardId(null);
+                    setEditingCardMode("menu");
+                    setSelectedCroppedImageIndex(null);
+                  }}
+                  style={{ ...secondaryButtonStyle, width: "100%", minHeight: "44px" }}
+                >
+                  閉じる
+                </button>
+              </div>
+            )}
 
-            <input
-              type="number"
-              min="0"
-              value={editingCount}
-              onChange={(event) => setEditingCount(Number(event.target.value))}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                borderRadius: "10px",
-                border: "1px solid #ddd",
-                fontSize: "20px",
-                marginBottom: "16px",
-              }}
-            />
-
-            {editingCardId &&
-              productCroppedImages[getProductIdFromCardId(editingCardId) ?? ""]?.length > 0 && (
-                <div
+            {editingCardMode === "count" && (
+              <div style={{ display: "grid", gap: "14px" }}>
+                <h2 style={{ margin: 0 }}>所持枚数</h2>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={editingCount}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => {
+                    const value = event.target.value.replace(/\D/g, "");
+                    setEditingCount(value === "" ? 0 : Number(value));
+                  }}
                   style={{
-                    marginBottom: "16px",
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "14px",
+                    borderRadius: "12px",
+                    border: "1px solid #ddd",
+                    fontSize: "22px",
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => setEditingCount((prev) => Math.max(0, prev - 1))}
+                    style={{ ...secondaryButtonStyle, flex: 1, minHeight: "44px" }}
+                  >
+                    -1
+                  </button>
+
+                  <button
+                    onClick={() => setEditingCount((prev) => prev + 1)}
+                    style={{ ...secondaryButtonStyle, flex: 1, minHeight: "44px" }}
+                  >
+                    +1
+                  </button>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCardMode("menu")}
+                    style={{ ...secondaryButtonStyle, flex: 1, minHeight: "44px" }}
+                  >
+                    戻る
+                  </button>
+                  <button onClick={saveCount} style={{ ...themedPrimaryButtonStyle, flex: 1, minHeight: "44px" }}>
+                    保存
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {editingCardMode === "image" && (
+              <div style={{ display: "grid", gap: "14px" }}>
+                <h2 style={{ margin: 0 }}>画像編集</h2>
+
+                {editingCardId &&
+                  productCroppedImages[getProductIdFromCardId(editingCardId) ?? ""]?.length > 0 && (
+                    <div
+                      style={{
+                        padding: "12px",
+                        borderRadius: "12px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
+                        切り出し画像から選ぶ
+                      </div>
+
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(4, 1fr)",
+                          gap: "8px",
+                          maxHeight: "240px",
+                          overflow: "auto",
+                        }}
+                      >
+                        {productCroppedImages[
+                          getProductIdFromCardId(editingCardId) ?? ""
+                        ].map((image, index) => {
+                          const selected = selectedCroppedImageIndex === index;
+
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => {
+                                setSelectedCroppedImageIndex(index);
+                                selectCroppedImageForEditingCard(image);
+                              }}
+                              style={{
+                                padding: 0,
+                                border: selected
+                                  ? `3px solid ${selectedGroupTheme.main}`
+                                  : "1px solid #ddd",
+                                borderRadius: "10px",
+                                overflow: "hidden",
+                                background: selected ? selectedGroupTheme.pale : "white",
+                                cursor: "pointer",
+                                boxShadow: selected
+                                  ? `0 0 0 3px ${selectedGroupTheme.border}`
+                                  : "none",
+                                position: "relative",
+                              }}
+                              title={`切り出し画像 ${index + 1}`}
+                            >
+                              {selected && (
+                                <span
+                                  style={{
+                                    position: "absolute",
+                                    top: "4px",
+                                    right: "4px",
+                                    background: selectedGroupTheme.main,
+                                    color: "white",
+                                    borderRadius: "999px",
+                                    fontSize: "11px",
+                                    fontWeight: "bold",
+                                    padding: "2px 6px",
+                                    zIndex: 1,
+                                  }}
+                                >
+                                  選択中
+                                </span>
+                              )}
+                              <img
+                                src={image}
+                                alt={`crop-choice-${index + 1}`}
+                                style={{
+                                  width: "100%",
+                                  aspectRatio: "3 / 4",
+                                  objectFit: "contain",
+                                  display: "block",
+                                  background: "white",
+                                }}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                <label
+                  style={{
+                    display: "block",
                     padding: "12px",
                     borderRadius: "12px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
+                    border: "1px dashed #c084fc",
+                    cursor: "pointer",
+                    textAlign: "center",
+                    fontWeight: "bold",
                   }}
                 >
-                  <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
-                    切り出し画像から選ぶ
-                  </div>
+                  画像を登録・変更
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => uploadCardImage(event.target.files?.[0] ?? null)}
+                    style={{ display: "none" }}
+                  />
+                </label>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(4, 1fr)",
-                      gap: "8px",
-                      maxHeight: "220px",
-                      overflow: "auto",
-                    }}
+                {editingCardId && cardImages[editingCardId] && (
+                  <button
+                    onClick={removeCardImage}
+                    style={{ ...dangerButtonStyle, minHeight: "44px" }}
                   >
-                    {productCroppedImages[
-                      getProductIdFromCardId(editingCardId) ?? ""
-                    ].map((image, index) => (
-                      <button
-                        key={index}
-                        onClick={() => selectCroppedImageForEditingCard(image)}
-                        style={{
-                          padding: 0,
-                          border: "1px solid #ddd",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          background: "white",
-                          cursor: "pointer",
-                        }}
-                        title={`切り出し画像 ${index + 1}`}
-                      >
-                        <img
-                          src={image}
-                          alt={`crop-choice-${index + 1}`}
-                          style={{
-                            width: "100%",
-                            aspectRatio: "3 / 4",
-                            objectFit: "contain",
-                            display: "block",
-                            background: "white",
-                          }}
-                        />
-                      </button>
-                    ))}
-                  </div>
+                    画像を削除
+                  </button>
+                )}
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCardMode("menu")}
+                    style={{ ...secondaryButtonStyle, flex: 1, minHeight: "44px" }}
+                  >
+                    戻る
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCardId(null);
+                      setEditingCardMode("menu");
+                      setSelectedCroppedImageIndex(null);
+                    }}
+                    style={{ ...themedPrimaryButtonStyle, flex: 1, minHeight: "44px" }}
+                  >
+                    完了
+                  </button>
                 </div>
-              )}
-
-            <div
-              style={{
-                display: "grid",
-                gap: "8px",
-                marginBottom: "16px",
-              }}
-            >
-              <label
-                style={{
-                  display: "block",
-                  padding: "10px",
-                  borderRadius: "10px",
-                  border: "1px dashed #c084fc",
-                  cursor: "pointer",
-                  textAlign: "center",
-                }}
-              >
-                画像を登録・変更
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) => uploadCardImage(event.target.files?.[0] ?? null)}
-                  style={{ display: "none" }}
-                />
-              </label>
-
-              {editingCardId && cardImages[editingCardId] && (
-                <button
-                  onClick={removeCardImage}
-                  style={dangerButtonStyle}
-                >
-                  画像を削除
-                </button>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                onClick={() => setEditingCount((prev) => Math.max(0, prev - 1))}
-                style={secondaryButtonStyle}
-              >
-                -1
-              </button>
-
-              <button
-                onClick={() => setEditingCount((prev) => prev + 1)}
-                style={secondaryButtonStyle}
-              >
-                +1
-              </button>
-            </div>
-
-            <button onClick={saveCount} style={{ ...primaryButtonStyle, width: "100%", marginTop: "16px" }}>
-              保存
-            </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -4961,21 +6289,21 @@ function App() {
                 padding: "8px",
                 borderRadius: "24px",
                 background: "rgba(255,255,255,0.94)",
-                border: "1px solid #f3d9e8",
-                boxShadow: "0 12px 32px rgba(236, 72, 153, 0.18)",
+                border: `1px solid ${selectedGroupTheme.border}`,
+                boxShadow: `0 12px 32px ${selectedGroupTheme.border}`,
                 backdropFilter: "blur(16px)",
               }}
             >
-              <button onClick={() => setActiveTab("collection")} style={activeTab === "collection" ? mobileNavActiveButtonStyle : mobileNavButtonStyle}>
+              <button onClick={() => setActiveTab("collection")} style={activeTab === "collection" ? themedMobileNavActiveButtonStyle : mobileNavButtonStyle}>
                 🏠<br />一覧
               </button>
-              <button onClick={() => setActiveTab("products")} style={activeTab === "products" ? mobileNavActiveButtonStyle : mobileNavButtonStyle}>
+              <button onClick={() => setActiveTab("products")} style={activeTab === "products" ? themedMobileNavActiveButtonStyle : mobileNavButtonStyle}>
                 🔳<br />商品
               </button>
-              <button onClick={() => setActiveTab("members")} style={activeTab === "members" ? mobileNavActiveButtonStyle : mobileNavButtonStyle}>
+              <button onClick={() => setActiveTab("members")} style={activeTab === "members" ? themedMobileNavActiveButtonStyle : mobileNavButtonStyle}>
                 👥<br />メンバー
               </button>
-              <button onClick={() => setActiveTab("data")} style={activeTab === "data" ? mobileNavActiveButtonStyle : mobileNavButtonStyle}>
+              <button onClick={() => setActiveTab("data")} style={activeTab === "data" ? themedMobileNavActiveButtonStyle : mobileNavButtonStyle}>
                 💾<br />データ
               </button>
             </nav>
@@ -5080,12 +6408,6 @@ const tabButtonStyle = {
   cursor: "pointer",
 };
 
-const activeTabButtonStyle = {
-  ...tabButtonStyle,
-  border: "1px solid #ff4fa3",
-  background: "#fff0f7",
-  color: "#ff4fa3",
-};
 
 const secondaryButtonStyle = {
   flex: 1,
@@ -5128,11 +6450,6 @@ const sidebarButtonStyle = {
   cursor: "pointer",
 };
 
-const sidebarActiveButtonStyle = {
-  ...sidebarButtonStyle,
-  background: "#ffe5f1",
-  color: "#ff4fa3",
-};
 
 const mobileNavButtonStyle = {
   border: "none",
@@ -5146,10 +6463,5 @@ const mobileNavButtonStyle = {
   cursor: "pointer",
 };
 
-const mobileNavActiveButtonStyle = {
-  ...mobileNavButtonStyle,
-  background: "#ffe5f1",
-  color: "#ff4fa3",
-};
 
 export default App;
