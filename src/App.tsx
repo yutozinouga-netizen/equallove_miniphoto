@@ -15,7 +15,7 @@ type AppProduct = BaseProduct & {
   importedMemberImageCount?: number;
 };
 
-type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "detect";
+type ImportImageLayout = "auto" | "fixedFive" | "vertical" | "grid3x2" | "detect";
 
 const groupLabels: Record<GroupFilter, string> = {
   all: "すべて",
@@ -1107,12 +1107,14 @@ function App() {
         }
 
         if (resolvedLayout === "fixedFive" && normalCardCount === 5) {
+          // Plusmemberの「1メンバー5種」画像は、上段3枚・下段2枚の固定配置。
+          // 白背景検出だとカード下部や次段を巻き込みやすいため、カード位置を比率で切り出す。
           const regions = [
-            { x: width * 0.02, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
-            { x: width * 0.345, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
-            { x: width * 0.67, y: height * 0.02, width: width * 0.31, height: height * 0.55 },
-            { x: width * 0.17, y: height * 0.43, width: width * 0.31, height: height * 0.55 },
-            { x: width * 0.52, y: height * 0.43, width: width * 0.31, height: height * 0.55 },
+            { x: width * 0.075, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+            { x: width * 0.3825, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+            { x: width * 0.69, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+            { x: width * 0.235, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+            { x: width * 0.53, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
           ];
 
           const fixedCrops = await cropImageByRegions(sourceImage, regions);
@@ -1142,6 +1144,63 @@ function App() {
     });
   };
 
+  const splitImportedGroupImage = (
+    sourceImage: string,
+    normalCardCount: number,
+    layout: ImportImageLayout
+  ) => {
+    return new Promise<string[][]>((resolve) => {
+      if (!sourceImage || normalCardCount <= 0) {
+        resolve([]);
+        return;
+      }
+
+      const image = new Image();
+
+      image.onload = async () => {
+        const width = image.width;
+        const height = image.height;
+
+        if (layout !== "grid3x2" || normalCardCount !== 2) {
+          const singleMemberImages = await splitImportedMemberImage(
+            sourceImage,
+            normalCardCount,
+            layout
+          );
+          resolve(singleMemberImages.length > 0 ? [singleMemberImages] : []);
+          return;
+        }
+
+        // イコノイジョイ混在商品の一部は、1枚の元画像に
+        // 3名ぶん × 縦2種 が入っている。グループを跨がず、あいうえお順に横へ並ぶ想定。
+        const topRegions = [
+          { x: width * 0.075, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+          { x: width * 0.3825, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+          { x: width * 0.69, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+        ];
+        const bottomRegions = [
+          { x: width * 0.075, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+          { x: width * 0.3825, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+          { x: width * 0.69, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+        ];
+
+        const crops = await cropImageByRegions(sourceImage, [
+          ...topRegions,
+          ...bottomRegions,
+        ]);
+
+        resolve([
+          [crops[0], crops[3]].filter(Boolean),
+          [crops[1], crops[4]].filter(Boolean),
+          [crops[2], crops[5]].filter(Boolean),
+        ].filter((group) => group.length > 0));
+      };
+
+      image.onerror = () => resolve([]);
+      image.src = sourceImage;
+    });
+  };
+
   const applyImportedMemberImages = async (
     productId: string,
     targetMembers: Member[],
@@ -1157,19 +1216,31 @@ function App() {
 
     const nextCardImages: Record<string, string> = {};
     const allCrops: string[] = [];
+    const memberImageSets: string[][] = [];
+
+    if (importImageLayout === "grid3x2") {
+      for (const sourceImage of sourceImages) {
+        const groups = await splitImportedGroupImage(
+          sourceImage,
+          normalCardCount,
+          importImageLayout
+        );
+        memberImageSets.push(...groups);
+      }
+    } else {
+      for (const sourceImage of sourceImages) {
+        const splitImages = await splitImportedMemberImage(
+          sourceImage,
+          normalCardCount,
+          importImageLayout
+        );
+        memberImageSets.push(splitImages.slice(0, normalCardCount));
+      }
+    }
 
     for (let memberIndex = 0; memberIndex < targetMembers.length; memberIndex += 1) {
       const member = targetMembers[memberIndex];
-      const sourceImage = sourceImages[memberIndex];
-
-      if (!sourceImage) continue;
-
-      const splitImages = await splitImportedMemberImage(
-        sourceImage,
-        normalCardCount,
-        importImageLayout
-      );
-      const imagesToApply = splitImages.slice(0, normalCardCount);
+      const imagesToApply = memberImageSets[memberIndex] ?? [];
       allCrops.push(...imagesToApply);
 
       for (let cardIndex = 0; cardIndex < cards.length; cardIndex += 1) {
@@ -2437,7 +2508,7 @@ function App() {
                 メンバー別画像：{pendingProductMemberImages.length}枚
               </div>
               <p style={{ color: "#666", fontSize: "13px", marginBottom: "10px" }}>
-                通常商品は1番から対象メンバー順に自動割り当て。混在商品は、グループごとの開始番号と使用する元画像数を指定して分割登録できる。2種が縦に並ぶ商品は「縦2枚」を選んでね。
+                通常商品は1番から対象メンバー順に自動割り当て。混在商品は、グループごとの開始番号と使用する元画像数を指定して分割登録できる。1枚の元画像に3名×縦2種が入っている商品は「3名×縦2種」を選んでね。
               </p>
 
               <div
@@ -2499,7 +2570,8 @@ function App() {
                 >
                   <option value="auto">自動（5枚商品/縦2枚商品を推定）</option>
                   <option value="fixedFive">通常5枚（上3枚・下2枚）</option>
-                  <option value="vertical">縦並び（2枚商品・縦に同一メンバー）</option>
+                  <option value="vertical">縦並び（1画像=1メンバー・2枚商品）</option>
+                  <option value="grid3x2">3名×縦2種（1画像=3メンバー）</option>
                   <option value="detect">従来の自動検出</option>
                 </select>
               </label>
