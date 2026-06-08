@@ -1535,23 +1535,174 @@ function App() {
           return;
         }
 
-        // イコノイジョイ混在商品の一部は、1枚の元画像に
-        // 3名ぶん × 縦2種 が入っている。グループを跨がず、あいうえお順に横へ並ぶ想定。
-        const topRegions = [
-          { x: width * 0.075, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
-          { x: width * 0.3825, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
-          { x: width * 0.69, y: height * 0.075, width: width * 0.235, height: height * 0.405 },
+        // イコノイジョイ混在商品は、1枚の元画像に最大3名ぶんが横並び、
+        // 各メンバーの2種が縦に並ぶ構成。
+        // Volやページによってカード幅・余白が微妙に違うため、固定座標だけに頼らず、
+        // まず画像内の「白背景ではない領域」から列と行を検出して切り出す。
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          const fallbackCrops = await cropImageByRegions(sourceImage, [
+            { x: width * 0.055, y: height * 0.055, width: width * 0.27, height: height * 0.42 },
+            { x: width * 0.365, y: height * 0.055, width: width * 0.27, height: height * 0.42 },
+            { x: width * 0.675, y: height * 0.055, width: width * 0.27, height: height * 0.42 },
+            { x: width * 0.055, y: height * 0.525, width: width * 0.27, height: height * 0.42 },
+            { x: width * 0.365, y: height * 0.525, width: width * 0.27, height: height * 0.42 },
+            { x: width * 0.675, y: height * 0.525, width: width * 0.27, height: height * 0.42 },
+          ]);
+
+          resolve([
+            [fallbackCrops[0], fallbackCrops[3]].filter(Boolean),
+            [fallbackCrops[1], fallbackCrops[4]].filter(Boolean),
+            [fallbackCrops[2], fallbackCrops[5]].filter(Boolean),
+          ].filter((group) => group.length > 0));
+          return;
+        }
+
+        context.drawImage(image, 0, 0);
+        const imageData = context.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+
+        const isContentPixel = (x: number, y: number) => {
+          const index = (y * width + x) * 4;
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          const a = pixels[index + 3];
+
+          if (a < 10) return false;
+
+          // ほぼ白いページ背景だけ除外する。
+          // カードの薄い水色・薄いグレー・薄いピンク部分は残したいので、判定はかなり厳しめ。
+          return !(r > 252 && g > 252 && b > 252);
+        };
+
+        const buildRuns = (
+          scores: number[],
+          threshold: number,
+          maxGap: number,
+          minSize: number,
+          maxSize: number
+        ) => {
+          const rawRuns: Array<{ start: number; end: number }> = [];
+          let runStart: number | null = null;
+
+          for (let index = 0; index < scores.length; index += 1) {
+            if (scores[index] >= threshold) {
+              if (runStart === null) runStart = index;
+            } else if (runStart !== null) {
+              rawRuns.push({ start: runStart, end: index - 1 });
+              runStart = null;
+            }
+          }
+
+          if (runStart !== null) {
+            rawRuns.push({ start: runStart, end: scores.length - 1 });
+          }
+
+          const mergedRuns: Array<{ start: number; end: number }> = [];
+
+          rawRuns.forEach((run) => {
+            const previous = mergedRuns[mergedRuns.length - 1];
+
+            if (previous && run.start - previous.end <= maxGap) {
+              previous.end = run.end;
+              return;
+            }
+
+            mergedRuns.push({ ...run });
+          });
+
+          return mergedRuns
+            .map((run) => ({
+              ...run,
+              size: run.end - run.start + 1,
+            }))
+            .filter((run) => run.size >= minSize && run.size <= maxSize);
+        };
+
+        const xScores = Array.from({ length: width }, () => 0);
+        const yScores = Array.from({ length: height }, () => 0);
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            if (!isContentPixel(x, y)) continue;
+            xScores[x] += 1;
+            yScores[y] += 1;
+          }
+        }
+
+        const columnRuns = buildRuns(
+          xScores,
+          Math.max(6, Math.round(height * 0.045)),
+          Math.max(6, Math.round(width * 0.025)),
+          Math.round(width * 0.12),
+          Math.round(width * 0.36)
+        )
+          .sort((a, b) => b.size - a.size)
+          .slice(0, 3)
+          .sort((a, b) => a.start - b.start);
+
+        const rowRuns = buildRuns(
+          yScores,
+          Math.max(6, Math.round(width * 0.06)),
+          Math.max(6, Math.round(height * 0.025)),
+          Math.round(height * 0.20),
+          Math.round(height * 0.48)
+        )
+          .sort((a, b) => b.size - a.size)
+          .slice(0, 2)
+          .sort((a, b) => a.start - b.start);
+
+        const fallbackColumns = [
+          { start: width * 0.055, end: width * 0.325 },
+          { start: width * 0.365, end: width * 0.635 },
+          { start: width * 0.675, end: width * 0.945 },
         ];
-        const bottomRegions = [
-          { x: width * 0.075, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
-          { x: width * 0.3825, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
-          { x: width * 0.69, y: height * 0.53, width: width * 0.235, height: height * 0.405 },
+        const fallbackRows = [
+          { start: height * 0.055, end: height * 0.475 },
+          { start: height * 0.525, end: height * 0.945 },
         ];
 
-        const crops = await cropImageByRegions(sourceImage, [
-          ...topRegions,
-          ...bottomRegions,
-        ]);
+        const columns = columnRuns.length === 3 ? columnRuns : fallbackColumns;
+        const rows = rowRuns.length === 2 ? rowRuns : fallbackRows;
+
+        const clampRegion = (column: { start: number; end: number }, row: { start: number; end: number }) => {
+          const detectedWidth = column.end - column.start + 1;
+          const detectedHeight = row.end - row.start + 1;
+
+          // ほんの少し余白を足して、カード下部のロゴや細い外枠を拾う。
+          // 足しすぎると隣のカードが混ざるので、通常5枚より控えめ。
+          const xPadding = Math.max(3, Math.round(detectedWidth * 0.035));
+          const topPadding = Math.max(3, Math.round(detectedHeight * 0.025));
+          const bottomPadding = Math.max(6, Math.round(detectedHeight * 0.055));
+
+          const sx = Math.max(0, Math.round(column.start - xPadding));
+          const sy = Math.max(0, Math.round(row.start - topPadding));
+          const ex = Math.min(width, Math.round(column.end + xPadding));
+          const ey = Math.min(height, Math.round(row.end + bottomPadding));
+
+          return {
+            x: sx,
+            y: sy,
+            width: Math.max(1, ex - sx),
+            height: Math.max(1, ey - sy),
+          };
+        };
+
+        const regions = [
+          clampRegion(columns[0], rows[0]),
+          clampRegion(columns[1], rows[0]),
+          clampRegion(columns[2], rows[0]),
+          clampRegion(columns[0], rows[1]),
+          clampRegion(columns[1], rows[1]),
+          clampRegion(columns[2], rows[1]),
+        ];
+
+        const crops = await cropImageByRegions(sourceImage, regions);
 
         resolve([
           [crops[0], crops[3]].filter(Boolean),
