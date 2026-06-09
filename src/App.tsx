@@ -781,11 +781,10 @@ function App() {
             src={image}
             alt={member.name}
             style={{
-              width: "94%",
-              height: "94%",
-              borderRadius: "50%",
+              width: "100%",
+              height: "100%",
               objectFit: "cover",
-              objectPosition: "center 42%",
+              objectPosition: "center 50%",
               display: "block",
             }}
           />
@@ -2689,9 +2688,9 @@ function App() {
       const image = new Image();
 
       image.onload = () => {
-        // メンバーアイコンは丸枠で表示するため、保存時点で正方形に整える。
-        // 人物画像は頭上が重要なので、縦長画像は上端を残して下側を優先的に切る。
-        // 画面表示側でも少しだけ内側に収め、丸枠で頭が切れにくいようにする。
+        // メンバーアイコンは丸枠いっぱいに表示する。
+        // ただし中央切り抜きだと頭上が切れやすいため、切り抜き範囲を少し上へずらして、
+        // 画像内の人物をアイコン内で少し下に見せる。
         const maxSize = 260;
         const canvas = document.createElement("canvas");
         canvas.width = maxSize;
@@ -2719,8 +2718,9 @@ function App() {
           sx = (image.width - sw) / 2;
         } else {
           sh = image.width / targetAspect;
-          // 頭上が切れないよう、縦長画像は上端を残して切り出す。
-          sy = 0;
+          // 通常の中央切り抜きより上側を多めに残す。
+          // これにより顔・頭飾りが上で切れにくく、下側は多少切れてもよい前提にする。
+          sy = Math.max(0, (image.height - sh) * 0.12);
         }
 
         context.drawImage(image, sx, sy, sw, sh, 0, 0, maxSize, maxSize);
@@ -3823,12 +3823,36 @@ function App() {
             style={inputStyle}
           />
 
-          <input
-            type="date"
-            value={newProductReleaseDate}
-            onChange={(event) => setNewProductReleaseDate(event.target.value)}
-            style={inputStyle}
-          />
+          <label
+            style={{
+              display: "grid",
+              gap: "6px",
+              fontWeight: "bold",
+              color: "#374151",
+            }}
+          >
+            <span>発売日（URL取込なしでも手動設定できます）</span>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="date"
+                value={newProductReleaseDate}
+                onChange={(event) => setNewProductReleaseDate(event.target.value)}
+                style={{ ...inputStyle, flex: "1 1 220px", minWidth: "180px" }}
+              />
+              {newProductReleaseDate && (
+                <button
+                  type="button"
+                  onClick={() => setNewProductReleaseDate("")}
+                  style={secondaryActionButtonStyle}
+                >
+                  未設定に戻す
+                </button>
+              )}
+            </div>
+            <span style={{ color: "#6b7280", fontSize: "12px", fontWeight: 700 }}>
+              画像取込だけで追加する場合や、画像なしで追加する場合もここで発売日を指定できます。
+            </span>
+          </label>
 
           {pendingProductMemberImages.length > 0 && (
             <div
