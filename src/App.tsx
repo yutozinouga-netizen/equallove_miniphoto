@@ -1281,6 +1281,8 @@ function App() {
   const uploadCardImage = (file: File | null) => {
     if (!file || !editingCardId) return;
 
+    setSelectedCroppedImageIndex(null);
+
     const reader = new FileReader();
 
     reader.onload = async () => {
@@ -2772,7 +2774,52 @@ function App() {
     reader.readAsDataURL(file);
   };
 
-  const getImportEndpoint = () => "/.netlify/functions/import-plusmember";
+  const getImportEndpoints = () => {
+    const netlifyFunctionEndpoint = "/.netlify/functions/import-plusmember";
+
+    if (typeof window === "undefined") {
+      return [netlifyFunctionEndpoint];
+    }
+
+    const isLocalHost =
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+    if (!isLocalHost) {
+      return [netlifyFunctionEndpoint];
+    }
+
+    return [
+      "http://localhost:3001/api/import-plusmember",
+      netlifyFunctionEndpoint,
+      "http://localhost:8888/.netlify/functions/import-plusmember",
+      "http://localhost:3001/.netlify/functions/import-plusmember",
+      "http://localhost:3001/import-plusmember",
+      "http://localhost:8787/import-plusmember",
+      "http://localhost:8788/import-plusmember",
+    ];
+  };
+
+  const fetchImportJson = async (params: Record<string, string>): Promise<any> => {
+    const query = new URLSearchParams(params).toString();
+    let lastError: unknown = null;
+
+    for (const endpoint of getImportEndpoints()) {
+      try {
+        const response = await fetch(`${endpoint}?${query}`);
+
+        if (!response.ok) {
+          lastError = new Error(`import api failed: ${response.status}`);
+          continue;
+        }
+
+        return await response.json();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("import api failed");
+  };
 
   const getProfileImageDedupKey = (item: ImportedProfileImage) =>
     item.imageUrl || item.image;
@@ -2825,15 +2872,7 @@ function App() {
     setIsImportingProfileImages(true);
 
     try {
-      const response = await fetch(
-        `${getImportEndpoint()}?mode=profile&url=${encodeURIComponent(url)}`
-      );
-
-      if (!response.ok) {
-        throw new Error("profile image import api failed");
-      }
-
-      const data = await response.json();
+      const data = await fetchImportJson({ mode: "profile", url });
       const images = Array.isArray(data.profileImages)
         ? data.profileImages
             .map((item: unknown) => {
@@ -2879,13 +2918,13 @@ function App() {
     if (!image) return "";
     if (image.startsWith("data:")) return image;
 
-    const response = await fetch(
-      `${getImportEndpoint()}?mode=image&url=${encodeURIComponent(image)}`
-    );
+    let data: any;
 
-    if (!response.ok) return "";
-
-    const data = await response.json();
+    try {
+      data = await fetchImportJson({ mode: "image", url: image });
+    } catch {
+      return "";
+    }
     return typeof data.image === "string" ? data.image : "";
   };
 
@@ -3009,15 +3048,7 @@ function App() {
     setIsImportingProduct(true);
 
     try {
-      const response = await fetch(
-        `${getImportEndpoint()}?url=${encodeURIComponent(url)}`
-      );
-
-      if (!response.ok) {
-        throw new Error("product import api failed");
-      }
-
-      const data = await response.json();
+      const data = await fetchImportJson({ url });
 
       if (data.type !== "plusmember-product-import" || !data.product) {
         alert("商品情報を取得できませんでした");
@@ -6206,6 +6237,51 @@ function App() {
               <div style={{ display: "grid", gap: "14px" }}>
                 <h2 style={{ margin: 0 }}>画像編集</h2>
 
+                <div
+                  style={{
+                    padding: "12px",
+                    borderRadius: "12px",
+                    background: "#fff7ed",
+                    border: "1px solid #fed7aa",
+                    display: "grid",
+                    gap: "10px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: "bold", marginBottom: "4px", color: "#9a3412" }}>
+                      ① 写真ライブラリ・撮影画像から選ぶ
+                    </div>
+                    <p style={{ margin: 0, color: "#9a3412", fontSize: "13px", lineHeight: 1.6 }}>
+                      シークレットや手元で撮影したカード画像を、このカードだけに登録できます。
+                    </p>
+                  </div>
+
+                  <label
+                    style={{
+                      display: "block",
+                      padding: "12px",
+                      borderRadius: "12px",
+                      border: "1px dashed #fb923c",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      fontWeight: "bold",
+                      background: "white",
+                      color: "#9a3412",
+                    }}
+                  >
+                    写真ライブラリから選択
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => {
+                        uploadCardImage(event.target.files?.[0] ?? null);
+                        event.currentTarget.value = "";
+                      }}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+                </div>
+
                 {editingCardId &&
                   productCroppedImages[getProductIdFromCardId(editingCardId) ?? ""]?.length > 0 && (
                     <div
@@ -6216,9 +6292,12 @@ function App() {
                         border: "1px solid #e2e8f0",
                       }}
                     >
-                      <div style={{ fontWeight: "bold", marginBottom: "8px" }}>
-                        切り出し画像から選ぶ
+                      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
+                        ② 保存済み切り出し画像から選ぶ
                       </div>
+                      <p style={{ margin: "0 0 8px", color: "#64748b", fontSize: "13px", lineHeight: 1.6 }}>
+                        商品管理で保存した切り出し画像を、このカードに反映できます。
+                      </p>
 
                       <div
                         style={{
@@ -6292,26 +6371,6 @@ function App() {
                       </div>
                     </div>
                   )}
-
-                <label
-                  style={{
-                    display: "block",
-                    padding: "12px",
-                    borderRadius: "12px",
-                    border: "1px dashed #c084fc",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    fontWeight: "bold",
-                  }}
-                >
-                  画像を登録・変更
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => uploadCardImage(event.target.files?.[0] ?? null)}
-                    style={{ display: "none" }}
-                  />
-                </label>
 
                 {editingCardId && cardImages[editingCardId] && (
                   <button
